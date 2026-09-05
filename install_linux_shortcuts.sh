@@ -65,7 +65,7 @@ cat << EOF > "$HOME/.local/share/applications/agy-link.desktop"
 [Desktop Entry]
 Name=Antigravity Link Chat
 Comment=Open live terminal chat with peer AI station
-Exec=terminator -T "Antigravity Link Chat" -e "$HOME/.local/bin/link chat"
+Exec=terminator -u -T "Antigravity Link Chat" -x "$HOME/.local/bin/link" chat
 Icon=utilities-terminal
 Terminal=false
 Type=Application
