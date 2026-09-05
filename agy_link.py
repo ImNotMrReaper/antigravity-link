@@ -26,6 +26,7 @@ from datetime import timezone
 import json
 import os
 import platform
+import re
 import select
 import shutil
 import socket
@@ -196,6 +197,12 @@ def update_peer_state(packet):
         md_entry += f"**🎯 Delegated Task:** {payload.get('title')}  \n"
         md_entry += f"**Priority:** `{payload.get('priority')}` | **Target OS:** `{payload.get('target_os')}`  \n"
         md_entry += f"\n#### Instructions:\n{payload.get('description')}\n"
+    elif p_type == "agent_summon":
+        md_entry += f"**⚡ AI Summoned:** {payload.get('task')}  \n"
+        md_entry += "\n> Initiating local autonomous AGY turn in background...\n"
+    elif p_type == "agent_report":
+        md_entry += f"**🤖 AGY Task Report:** {payload.get('task')}  \n"
+        md_entry += f"\n#### Output from `{sender.get('user')}` ({sender.get('platform', '').upper()}):\n{payload.get('report')}\n"
     elif p_type in ("message", "chat"):
         md_entry += f"\n{payload.get('text', '')}\n"
 
@@ -211,7 +218,12 @@ def update_peer_state(packet):
         f.write(md_entry)
 
     log_activity(f"Received [{p_type}] from {sender.get('user')}: {str(payload)[:80]}")
-    notify_desktop(f"AGY: {sender.get('user')}", f"[{p_type.upper()}] {str(payload.get('task') or payload.get('title') or payload.get('text') or '')}")
+    notif_summary = (
+        payload.get("report", "")[:80]
+        if p_type == "agent_report"
+        else (payload.get("task") or payload.get("title") or payload.get("text") or "")
+    )
+    notify_desktop(f"AGY [{p_type.upper()}]: {sender.get('user')}", notif_summary)
 
 
 # -----------------------------------------------------------------------------
@@ -402,6 +414,145 @@ def run_relay_listener(transport, on_packet_callback, stop_event):
 
 
 # -----------------------------------------------------------------------------
+# Autonomous Agent Execution Engine
+# -----------------------------------------------------------------------------
+
+
+def find_agy_executable():
+    """Locate the agy CLI binary across Linux and Windows."""
+    agy_path = shutil.which("agy") or shutil.which("agy.cmd") or shutil.which("agy.exe")
+    if agy_path:
+        return agy_path
+
+    if sys.platform != "win32":
+        user_home = os.path.expanduser("~")
+        candidates = [
+            os.path.join(user_home, ".local", "bin", "agy"),
+            "/usr/local/bin/agy",
+            "/usr/bin/agy",
+        ]
+        for c in candidates:
+            if os.path.isfile(c) and os.access(c, os.X_OK):
+                return c
+    else:
+        user_profile = os.environ.get("USERPROFILE", "")
+        appdata = os.environ.get("APPDATA", "")
+        localappdata = os.environ.get("LOCALAPPDATA", "")
+        candidates = [
+            os.path.join(appdata, "npm", "agy.cmd"),
+            os.path.join(appdata, "npm", "agy.exe"),
+            os.path.join(localappdata, "Programs", "antigravity", "agy.exe"),
+            os.path.join(user_profile, ".local", "bin", "agy.exe"),
+            os.path.join(user_profile, ".local", "bin", "agy.cmd"),
+        ]
+        for c in candidates:
+            if os.path.isfile(c):
+                return c
+
+    return "agy"
+
+
+def should_execute_locally(target, config):
+    """Determine if this node should execute a summoned task."""
+    t = (target or "").lower().strip()
+    local_plat = platform.system().lower()
+    local_role = config.get("role", "").lower()
+    local_user = config.get("user", "").lower()
+    local_node = config.get("node_id", "").lower()
+
+    if t in ("both", "all", "local"):
+        return True
+    if t == "remote":
+        return False
+    if "linux" in t and "linux" in local_plat:
+        return True
+    if ("win" in t or "windows" in t) and "windows" in local_plat:
+        return True
+    if "reaper" in t and ("reaper" in local_user or "reaper" in local_node or "linux" in local_role):
+        return True
+    if "senpai" in t and ("senpai" in local_user or "senpai" in local_node or "windows" in local_role):
+        return True
+    return False
+
+
+def resolve_summon_target(raw_prefix, local_platform):
+    """Determine if a summon target tag is local, remote, or both."""
+    p = raw_prefix.lower().strip()
+    is_linux = (local_platform == "Linux")
+
+    if p in ("@both", "@all", "@ai", "@agy"):
+        return "both"
+    elif p in ("@linux", "@linux-ai", "@reaper", "@reaper-ai"):
+        return "local" if is_linux else "remote"
+    elif p in ("@windows", "@windows-ai", "@win", "@win-ai", "@senpai", "@senpai-ai"):
+        return "remote" if is_linux else "local"
+    return "both"
+
+
+def execute_local_agy(prompt, config, transport=None):
+    """Execute a task autonomously using local agy CLI and broadcast report."""
+    agy_bin = find_agy_executable()
+    user = config.get("user", "Local")
+    plat_str = platform.system().upper()
+    log_activity(f"Executing autonomous AGY task: {prompt[:80]}")
+    notify_desktop(f"AGY [{plat_str}] Autonomous Agent", f"Task started: {prompt[:80]}")
+
+    print(f"\n⚡ [AUTONOMOUS AGY RUNNING] Executing task on {user} ({plat_str})...\n   Task: {prompt}\n", flush=True)
+
+    cmd = [
+        agy_bin,
+        "-p", prompt,
+        "--dangerously-skip-permissions"
+    ]
+
+    start_t = time.time()
+    try:
+        proc = subprocess.run(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            timeout=300,
+            encoding="utf-8",
+            errors="replace"
+        )
+        elapsed = round(time.time() - start_t, 2)
+        output = proc.stdout.strip() if proc.stdout else "(No output returned)"
+        success = (proc.returncode == 0)
+        status_str = "completed" if success else f"failed (code {proc.returncode})"
+    except subprocess.TimeoutExpired:
+        elapsed = round(time.time() - start_t, 2)
+        output = "Execution timed out after 300 seconds."
+        success = False
+        status_str = "timeout"
+    except Exception as e:
+        elapsed = round(time.time() - start_t, 2)
+        output = f"Execution failed to launch: {str(e)}"
+        success = False
+        status_str = "error"
+
+    report_payload = {
+        "task": prompt,
+        "report": output,
+        "status": status_str,
+        "elapsed_sec": elapsed,
+        "success": success
+    }
+
+    # Record report locally
+    report_packet = make_packet("agent_report", report_payload, config)
+    update_peer_state(report_packet)
+
+    # Broadcast report to peer station if transport is available
+    if transport:
+        ok, msg = transport.send(report_packet)
+        log_activity(f"Dispatched agent report to peer: {status_str} ({elapsed}s, delivery: {ok})")
+
+    print(f"\n✅ [AUTONOMOUS AGY COMPLETE] {user} ({plat_str}) finished in {elapsed}s [{status_str.upper()}]\n> ", end="", flush=True)
+    return report_payload
+
+
+# -----------------------------------------------------------------------------
 # CLI Commands
 # -----------------------------------------------------------------------------
 
@@ -548,6 +699,20 @@ def cmd_daemon(args, config):
         elif p_type == "task_delegation":
             print(f"   Task:   {payload.get('title')} ({payload.get('priority')})", flush=True)
             print(f"   Detail: {payload.get('description')[:100]}...", flush=True)
+        elif p_type == "agent_summon":
+            task = payload.get("task", "")
+            target = payload.get("target", "both")
+            print(f"   ⚡ AI SUMMON: {task} (Target: {target})", flush=True)
+            if should_execute_locally(target, config):
+                print(f"   🚀 Launching local AGY background execution...", flush=True)
+                threading.Thread(target=execute_local_agy, args=(task, config, transport), daemon=True).start()
+        elif p_type == "agent_report":
+            status = payload.get("status", "completed").upper()
+            print(f"   🤖 AI REPORT: {payload.get('task')} [{status}]", flush=True)
+            rep = payload.get("report", "").strip()
+            if rep:
+                preview = "\n      ".join(rep.splitlines()[:6])
+                print(f"   Output:\n      {preview}", flush=True)
         elif p_type in ("message", "chat"):
             print(f"   Message: {payload.get('text', '')}", flush=True)
         print(f"💾 Updated {PEER_STATE_FILE} & {INBOX_FILE}\n> ", end="", flush=True)
@@ -569,20 +734,43 @@ def cmd_daemon(args, config):
 
 
 def cmd_chat(args, config):
-    """Interactive real-time two-way terminal chat."""
+    """Interactive real-time two-way terminal chat with @ai summon support."""
     transport = NetworkTransport(config)
     stop_event = threading.Event()
 
     print("============================================================")
     print(f"💬 AGY LIVE CHAT: {config.get('user')} ⟷ Remote Station")
     print("============================================================")
-    print("Type your message and press ENTER. Type 'exit' to quit.\n", flush=True)
+    print("Commands:")
+    print("  Normal message:      Just type and press ENTER")
+    print("  @ai <task>:          Summon BOTH AI agents to work autonomously")
+    print("  @senpai-ai <task>:   Summon Senpai's Windows AI agent")
+    print("  @reaper-ai <task>:   Summon Reaper's Linux AI agent")
+    print("  exit / quit:         Close chat session")
+    print("------------------------------------------------------------\n", flush=True)
 
     def on_packet(packet):
         sender = packet.get("sender", {})
+        p_type = packet.get("type", "chat")
         payload = packet.get("payload", {})
-        text = payload.get("text", "")
-        print(f"\n🔔 [@{sender.get('user')}]: {text}\n> ", end="", flush=True)
+
+        if p_type == "chat":
+            text = payload.get("text", "")
+            print(f"\n💬 [{sender.get('user')}]: {text}\n> ", end="", flush=True)
+        elif p_type == "agent_summon":
+            task = payload.get("task", "")
+            target = payload.get("target", "both")
+            print(f"\n⚡ [@{sender.get('user')} SUMMONED AI]: {task} (Target: {target})\n> ", end="", flush=True)
+            if should_execute_locally(target, config):
+                print(f"🚀 [LOCAL AGY] Starting background turn...\n> ", end="", flush=True)
+                threading.Thread(target=execute_local_agy, args=(task, config, transport), daemon=True).start()
+        elif p_type == "agent_report":
+            status = payload.get("status", "completed").upper()
+            rep = payload.get("report", "").strip()
+            print(f"\n🤖 [AI REPORT from {sender.get('user')} ({status})]:\n{rep}\n> ", end="", flush=True)
+        else:
+            print(f"\n🔔 [{p_type.upper()} from @{sender.get('user')}]: {payload.get('task') or payload.get('title') or payload.get('text') or ''}\n> ", end="", flush=True)
+
         update_peer_state(packet)
 
     t1 = threading.Thread(target=run_tcp_listener, args=(config, on_packet, stop_event), daemon=True)
@@ -597,6 +785,22 @@ def cmd_chat(args, config):
                 continue
             if msg.lower() in ("exit", "quit"):
                 break
+
+            # Check for summon command
+            match = re.match(r"^(@[a-zA-Z0-9_-]+)\s+(.+)$", msg, re.DOTALL)
+            if match:
+                tag = match.group(1).lower()
+                task_prompt = match.group(2).strip()
+                if tag in ("@ai", "@both", "@all", "@agy", "@senpai-ai", "@senpai", "@win-ai", "@windows-ai", "@reaper-ai", "@reaper", "@linux-ai"):
+                    target = resolve_summon_target(tag, platform.system())
+                    print(f"\n⚡ [SUMMON] Calling AI Agent (Target: {target.upper()}): {task_prompt}\n", flush=True)
+                    if target in ("both", "remote"):
+                        pkt = make_packet("agent_summon", {"task": task_prompt, "target": target}, config)
+                        transport.send(pkt)
+                    if target in ("both", "local"):
+                        threading.Thread(target=execute_local_agy, args=(task_prompt, config, transport), daemon=True).start()
+                    continue
+
             packet = make_packet("chat", {"text": msg}, config)
             transport.send(packet)
         except (KeyboardInterrupt, EOFError):
@@ -613,6 +817,43 @@ def cmd_inbox(args, config):
         return 0
     with open(INBOX_FILE, "r", encoding="utf-8") as f:
         print(f.read())
+    return 0
+
+
+def cmd_summon(args, config):
+    """Summon autonomous AI agent(s) via CLI command."""
+    prompt = args.prompt
+    target = args.target.lower()
+    transport = NetworkTransport(config)
+
+    print("============================================================")
+    print(f"⚡ SUMMONING ANTIGRAVITY AGENT(S) — Target: {target.upper()}")
+    print("============================================================")
+    print(f"Instruction: {prompt}")
+    print("------------------------------------------------------------")
+
+    # Send across the wire if remote or both or specific platform
+    if target in ("both", "remote", "windows", "linux", "senpai", "reaper"):
+        pkt = make_packet("agent_summon", {"task": prompt, "target": target}, config)
+        ok, msg = transport.send(pkt)
+        if ok:
+            print(f"[+] Remote summon packet dispatched: ✅ {msg}")
+        else:
+            print(f"[-] Remote summon packet failed: ❌ {msg}")
+
+    # Run locally if target is 'both' or 'local' or directed to local machine
+    if target in ("both", "local") or should_execute_locally(target, config):
+        print("[+] Executing autonomous turn on local machine...")
+        rep = execute_local_agy(prompt, config, transport)
+        print("\n============================================================")
+        print("🤖 LOCAL AGENT REPORT:")
+        print(rep.get("report", ""))
+        print(f"Elapsed: {rep.get('elapsed_sec')}s | Status: {rep.get('status')}")
+        print("============================================================")
+    else:
+        print("\n[+] Remote AI summoned. Waiting for peer agent report in background...")
+        print("    Check progress anytime with: python3 agy_link.py inbox")
+
     return 0
 
 
@@ -637,6 +878,16 @@ def main():
     # daemon
     p_daemon = subparsers.add_parser("daemon", help="Run background sync & message listener")
     p_daemon.add_argument("--port", type=int, help="Override local listener port")
+
+    # summon
+    p_summon = subparsers.add_parser("summon", help="Summon autonomous AI agent to execute a task")
+    p_summon.add_argument("prompt", help="Instruction or task for the AI agent")
+    p_summon.add_argument(
+        "--target",
+        choices=["both", "remote", "local", "windows", "linux", "senpai", "reaper"],
+        default="both",
+        help="Which AI agent to trigger (default: both)"
+    )
 
     # sync
     p_sync = subparsers.add_parser("sync", help="Broadcast active task and locked files")
@@ -678,6 +929,8 @@ def main():
         return cmd_status(args, config)
     elif args.command == "daemon":
         return cmd_daemon(args, config)
+    elif args.command == "summon":
+        return cmd_summon(args, config)
     elif args.command == "sync":
         return cmd_sync(args, config)
     elif args.command == "delegate":

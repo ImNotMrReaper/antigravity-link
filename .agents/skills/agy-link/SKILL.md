@@ -33,3 +33,17 @@ python3 agy_link.py send "<Message>" --agent
 ```bash
 python3 agy_link.py inbox
 ```
+
+### 6. Summon Autonomous AI Agent(s)
+Summon both local and remote AI agents to execute tasks in parallel:
+```bash
+python3 agy_link.py summon "<Task prompt>" --target both
+```
+Summon remote peer AI agent only (hands off task to peer machine):
+```bash
+python3 agy_link.py summon "<Task prompt>" --target remote
+```
+Summon local AI agent only:
+```bash
+python3 agy_link.py summon "<Task prompt>" --target local
+```

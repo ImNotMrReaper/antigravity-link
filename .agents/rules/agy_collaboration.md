@@ -28,3 +28,17 @@
   ```bash
   python3 agy_link.py send "<Message text>" --agent
   ```
+
+## 5. Autonomous AI Summoning & Cross-Machine Tandem Turns
+- When you need the remote peer AI (or both AIs) to execute autonomous actions on their host PCs and report the results back:
+  ```bash
+  # Summon both Linux and Windows AIs:
+  python3 agy_link.py summon "<Task prompt>" --target both
+
+  # Summon remote peer AI only:
+  python3 agy_link.py summon "<Task prompt>" --target remote
+  ```
+- In terminal chat (`python3 agy_link.py chat`), users can summon AI agents using tags:
+  - `@ai <task>` or `@both <task>` — wakes both AIs to work in parallel.
+  - `@senpai-ai <task>` — wakes Senpai's Windows AI agent.
+  - `@reaper-ai <task>` — wakes Reaper's Linux AI agent.

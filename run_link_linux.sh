@@ -21,6 +21,10 @@ case "$1" in
     inbox)
         python3 agy_link.py inbox
         ;;
+    summon)
+        shift
+        python3 agy_link.py summon "$@"
+        ;;
     sync)
         shift
         python3 agy_link.py sync "$@"

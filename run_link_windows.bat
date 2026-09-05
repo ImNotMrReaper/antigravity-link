@@ -15,10 +15,11 @@ echo   [4] Stop Background Daemon
 echo   [5] Check Link & Peer Status
 echo   [6] View Peer Inbox (INBOX.md)
 echo   [7] Broadcast State Sync
-echo   [8] Install Auto-Start on Windows Login
-echo   [9] Exit
+echo   [8] Summon AI Agent (@ai / @both / @senpai / @reaper)
+echo   [9] Install Auto-Start on Windows Login
+echo   [10] Exit
 echo ============================================================
-set /p choice="Select an option (1-9): "
+set /p choice="Select an option (1-10): "
 
 if "%choice%"=="1" (
     cls
@@ -69,10 +70,23 @@ if "%choice%"=="7" (
     goto MENU
 )
 if "%choice%"=="8" (
+    cls
+    echo ============================================================
+    echo   ⚡ SUMMON AI AGENT
+    echo ============================================================
+    set /p targetchoice="Target (both / remote / local) [default: both]: "
+    if "%targetchoice%"=="" set targetchoice=both
+    set /p aiprompt="Enter Task Prompt: "
+    python agy_link.py summon "%aiprompt%" --target %targetchoice%
+    echo.
+    pause
+    goto MENU
+)
+if "%choice%"=="9" (
     powershell -NoProfile -ExecutionPolicy Bypass -File install_startup_task.ps1
     pause
     goto MENU
 )
-if "%choice%"=="9" exit /b 0
+if "%choice%"=="10" exit /b 0
 
 goto MENU
