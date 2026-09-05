@@ -183,58 +183,33 @@ def open_inbox_window():
 
 
 def notify_desktop(title, message):
-    """Emit interactive desktop notification with clickable actions on Linux and Windows."""
+    """Emit lightweight desktop notification without external terminal popups."""
     def _worker():
         system = platform.system()
         try:
             if system == "Linux" and shutil.which("notify-send"):
-                proc = subprocess.run(
+                subprocess.run(
                     [
                         "notify-send",
                         "-a", "Antigravity Link",
                         "-i", "dialog-information",
-                        "-A", "default=Open Chat",
-                        "-A", "chat=Open Chat",
-                        "-A", "inbox=View Inbox",
                         title,
                         message[:120]
                     ],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    text=True,
-                    timeout=25
+                    check=False,
+                    timeout=5
                 )
-                action = (proc.stdout or "").strip().lower()
-                if action in ("default", "chat"):
-                    open_terminal_chat()
-                elif action == "inbox":
-                    open_inbox_window()
             elif system == "Windows":
-                script_dir = os.path.dirname(os.path.abspath(__file__))
-                notify_ps1 = os.path.join(script_dir, "notify_windows.ps1")
-                if os.path.exists(notify_ps1):
-                    clean_title = title.replace('"', '`"')
-                    clean_msg = message[:120].replace('"', '`"')
-                    cmd = [
-                        "powershell",
-                        "-NoProfile",
-                        "-ExecutionPolicy", "Bypass",
-                        "-File", notify_ps1,
-                        "-Title", clean_title,
-                        "-Message", clean_msg
-                    ]
-                    subprocess.run(cmd, check=False, timeout=20)
-                else:
-                    clean_title = title.replace('"', '`"')
-                    clean_msg = message[:100].replace('"', '`"')
-                    ps = (
-                        f'[reflection.assembly]::loadwithpartialname("System.Windows.Forms");'
-                        f'$n = new-object system.windows.forms.notifyicon;'
-                        f'$n.icon = [system.drawing.systemicons]::Information;'
-                        f'$n.visible = $true;'
-                        f'$n.showballoontip(10, "{clean_title}", "{clean_msg}", [system.windows.forms.tooltipicon]::Info);'
-                    )
-                    subprocess.run(["powershell", "-NoProfile", "-Command", ps], check=False, timeout=3)
+                clean_title = title.replace('"', '`"')
+                clean_msg = message[:100].replace('"', '`"')
+                ps = (
+                    f'[reflection.assembly]::loadwithpartialname("System.Windows.Forms");'
+                    f'$n = new-object system.windows.forms.notifyicon;'
+                    f'$n.icon = [system.drawing.systemicons]::Information;'
+                    f'$n.visible = $true;'
+                    f'$n.showballoontip(5, "{clean_title}", "{clean_msg}", [system.windows.forms.tooltipicon]::Info);'
+                )
+                subprocess.run(["powershell", "-NoProfile", "-Command", ps], check=False, timeout=3)
         except Exception:
             pass
 
@@ -462,7 +437,7 @@ def run_relay_listener(transport, on_packet_callback, stop_event):
     """Listen on HTTPS cloud relay stream for messages from remote peer."""
     seen_ids = set()
 
-    # Initial catch-up on recent messages
+    # Initial catch-up: mark existing backlog IDs as seen so we DO NOT replay old summons or notifications
     try:
         poll_url = f"{RELAY_HOST}/{transport.sub_topic}/json?poll=1"
         req = urllib.request.Request(poll_url, headers={"User-Agent": "AgyLink/1.0"})
@@ -476,11 +451,6 @@ def run_relay_listener(transport, on_packet_callback, stop_event):
                     msg_id = event.get("id")
                     if msg_id:
                         seen_ids.add(msg_id)
-                    if event.get("event") == "message":
-                        raw = event.get("message", "")
-                        if raw.startswith("{"):
-                            packet = json.loads(raw)
-                            on_packet_callback(packet)
                 except Exception:
                     pass
     except Exception:
