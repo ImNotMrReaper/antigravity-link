@@ -36,9 +36,11 @@
   python3 agy_link.py summon "<Task prompt>" --target both
 
   # Summon remote peer AI only:
-  python3 agy_link.py summon "<Task prompt>" --target remote
+  python3 agy_link.py summon "<Task prompt>" --target senpai  # (from Linux)
+  python3 agy_link.py summon "<Task prompt>" --target reaper  # (from Windows)
   ```
-- In terminal chat (`python3 agy_link.py chat`), users can summon AI agents using tags:
-  - `@ai <task>` or `@both <task>` — wakes both AIs to work in parallel.
-  - `@senpai-ai <task>` — wakes Senpai's Windows AI agent.
-  - `@reaper-ai <task>` — wakes Reaper's Linux AI agent.
+
+## 6. Strict AGY TUI Isolation
+- All communication, task summaries, status updates, and reports must be rendered directly inside the AGY TUI session.
+- Never spawn external terminal windows or desktop emulator windows (Terminator, cmd.exe, wt.exe).
+- Users interact seamlessly via native AGY slash commands (`/link`, `/senpai`, `/inbox`) or natural language.

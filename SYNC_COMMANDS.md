@@ -66,8 +66,18 @@ The repo includes a native AGY plugin located in `.agents/plugins/antigravity-li
 - `link_sync`: Broadcast active task and lock files (`task`, `status`, `files`).
 - `link_inbox`: Read recent messages and task handoffs from `INBOX.md`.
 
+### Native AGY TUI Slash Commands:
+No external terminals needed! Run these directly inside AGY chat:
+- **`/link status`** — Check live link connection & file locks
+- **`/link send <msg>`** — Send chat message to peer
+- **`/link summon <task>`** — Summon both AIs to work and report back
+- **`/senpai <task>`** — Delegate task or question to Senpai's Windows 11 station
+- **`/inbox`** — View incoming peer messages & AI task reports
+- **`/link sync --task "<name>"`** — Broadcast progress & lock files
+
 ### 1-Click Installation:
 - **Linux:** Run `./install_linux_shortcuts.sh`
 - **Windows:** Run `install_windows_shortcuts.ps1` (or Option `[9]` in `run_link_windows.bat`)
 - **Validate:** Run `agy plugin validate ~/.gemini/config/plugins/antigravity-link`
+
 
