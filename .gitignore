@@ -1,4 +1,5 @@
 # Local runtime state & inbox
+.agy_link/
 config.json
 INBOX.md
 LATEST.json
