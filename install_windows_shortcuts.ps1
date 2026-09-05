@@ -85,8 +85,22 @@ if (Test-Path $sourcePlugin) {
     }
     $configObj | ConvertTo-Json -Depth 3 | Set-Content -Path $pluginsJson -Encoding UTF8
     
+    # Configure global mcp_config.json
+    $globalMcpJson = Join-Path $geminiConfig "mcp_config.json"
+    $mcpServerScript = Join-Path $targetPlugin "mcp_server.py"
+    $mcpConfigObj = @{
+        mcpServers = @{
+            "antigravity-link" = @{
+                command = "python"
+                args = @($mcpServerScript)
+            }
+        }
+    }
+    $mcpConfigObj | ConvertTo-Json -Depth 4 | Set-Content -Path $globalMcpJson -Encoding UTF8
+    
     Write-Host "[✓] Installed AGY Plugin to '$targetPlugin'" -ForegroundColor Green
     Write-Host "[✓] Configured global plugins registry in '$pluginsJson'" -ForegroundColor Green
+    Write-Host "[✓] Configured global MCP server in '$globalMcpJson'" -ForegroundColor Green
 
     # Validate plugin if agy CLI is present
     $agyCmd = Get-Command "agy" -ErrorAction SilentlyContinue

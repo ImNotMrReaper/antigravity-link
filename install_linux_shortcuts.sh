@@ -102,6 +102,19 @@ EOF
 echo "[✓] Installed AGY Plugin to $TARGET_PLUGIN"
 echo "[✓] Configured global plugins registry in $GEMINI_CONFIG/plugins.json"
 
+# Configure global mcp_config.json
+cat << EOF > "$GEMINI_CONFIG/mcp_config.json"
+{
+  "mcpServers": {
+    "antigravity-link": {
+      "command": "python",
+      "args": ["$TARGET_PLUGIN/mcp_server.py"]
+    }
+  }
+}
+EOF
+echo "[✓] Configured global MCP server in $GEMINI_CONFIG/mcp_config.json"
+
 # Validate plugin
 if command -v agy &>/dev/null; then
     echo "🔍 Validating AGY plugin with agy CLI..."
