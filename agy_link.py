@@ -556,7 +556,7 @@ def find_agy_executable():
     return "agy"
 
 
-def should_execute_locally(target, config):
+def should_execute_locally(target, config, is_incoming=False):
     """Determine if this node should execute a summoned task."""
     t = (target or "").lower().strip()
     local_plat = platform.system().lower()
@@ -564,10 +564,21 @@ def should_execute_locally(target, config):
     local_user = config.get("user", "").lower()
     local_node = config.get("node_id", "").lower()
 
-    if t in ("both", "all", "local"):
+    if t in ("both", "all"):
         return True
-    if t == "remote":
-        return False
+    if is_incoming:
+        # If received from the network, 'remote' or 'peer' was sent for this node to execute!
+        if t in ("remote", "peer"):
+            return True
+        if t == "local":
+            return False
+    else:
+        # If evaluated locally before dispatch
+        if t == "local":
+            return True
+        if t in ("remote", "peer"):
+            return False
+
     if "linux" in t and "linux" in local_plat:
         return True
     if ("win" in t or "windows" in t) and "windows" in local_plat:
@@ -807,7 +818,7 @@ def cmd_daemon(args, config):
             task = payload.get("task", "")
             target = payload.get("target", "both")
             print(f"   ⚡ AI SUMMON: {task} (Target: {target})", flush=True)
-            if should_execute_locally(target, config):
+            if should_execute_locally(target, config, is_incoming=True):
                 print(f"   🚀 Launching local AGY background execution...", flush=True)
                 threading.Thread(target=execute_local_agy, args=(task, config, transport), daemon=True).start()
         elif p_type == "agent_report":
@@ -865,7 +876,7 @@ def cmd_chat(args, config):
             task = payload.get("task", "")
             target = payload.get("target", "both")
             print(f"\n⚡ [@{sender.get('user')} SUMMONED AI]: {task} (Target: {target})\n> ", end="", flush=True)
-            if should_execute_locally(target, config):
+            if should_execute_locally(target, config, is_incoming=True):
                 print(f"🚀 [LOCAL AGY] Starting background turn...\n> ", end="", flush=True)
                 threading.Thread(target=execute_local_agy, args=(task, config, transport), daemon=True).start()
         elif p_type == "agent_report":

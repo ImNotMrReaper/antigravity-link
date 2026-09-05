@@ -34,11 +34,11 @@ case "$1" in
         ;;
     senpai|remote)
         shift
-        exec python3 "$REPO_DIR/agy_link.py" summon "$*" --target remote
+        exec python3 "$REPO_DIR/agy_link.py" summon "$*" --target senpai
         ;;
     reaper|local)
         shift
-        exec python3 "$REPO_DIR/agy_link.py" summon "$*" --target local
+        exec python3 "$REPO_DIR/agy_link.py" summon "$*" --target reaper
         ;;
     pull)
         cd "$REPO_DIR" && git pull origin main
