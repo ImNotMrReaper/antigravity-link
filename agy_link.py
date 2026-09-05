@@ -149,7 +149,7 @@ def open_terminal_chat():
                 env["DISPLAY"] = ":0"
 
             if terminator:
-                cmd = [terminator, "-T", "Antigravity Link Chat", f"--working-directory={work_dir}", "-x", python_bin, script_path, "chat"]
+                cmd = [terminator, "-u", "-T", "Antigravity Link Chat", f"--working-directory={work_dir}", "-x", python_bin, script_path, "chat"]
             elif gnome_term:
                 cmd = [gnome_term, "--title=Antigravity Link Chat", f"--working-directory={work_dir}", "--", python_bin, script_path, "chat"]
             elif alacritty:
@@ -161,7 +161,7 @@ def open_terminal_chat():
             else:
                 cmd = ["xterm", "-title", "Antigravity Link Chat", "-e", f"cd {work_dir} && {python_bin} {script_path} chat"]
 
-            subprocess.Popen(cmd, cwd=work_dir, env=env)
+            subprocess.Popen(cmd, cwd=work_dir, env=env, start_new_session=True)
     except Exception as e:
         log_activity(f"Failed to open terminal chat window: {e}")
 
