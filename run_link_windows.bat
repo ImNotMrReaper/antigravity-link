@@ -16,10 +16,11 @@ echo   [5] Check Link & Peer Status
 echo   [6] View Peer Inbox (INBOX.md)
 echo   [7] Broadcast State Sync
 echo   [8] Summon AI Agent (@ai / @both / @senpai / @reaper)
-echo   [9] Install Auto-Start on Windows Login
-echo   [10] Exit
+echo   [9] Install Global 'link' Command & Desktop Shortcuts
+echo   [10] Install Auto-Start on Windows Login
+echo   [11] Exit
 echo ============================================================
-set /p choice="Select an option (1-10): "
+set /p choice="Select an option (1-11): "
 
 if "%choice%"=="1" (
     cls
@@ -83,10 +84,16 @@ if "%choice%"=="8" (
     goto MENU
 )
 if "%choice%"=="9" (
+    cls
+    powershell -NoProfile -ExecutionPolicy Bypass -File install_windows_shortcuts.ps1
+    pause
+    goto MENU
+)
+if "%choice%"=="10" (
     powershell -NoProfile -ExecutionPolicy Bypass -File install_startup_task.ps1
     pause
     goto MENU
 )
-if "%choice%"=="10" exit /b 0
+if "%choice%"=="11" exit /b 0
 
 goto MENU

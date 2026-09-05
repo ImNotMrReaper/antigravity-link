@@ -121,23 +121,124 @@ def log_activity(entry):
         pass
 
 
-def notify_desktop(title, message):
-    """Emit a native desktop notification on Linux or Windows."""
-    system = platform.system()
+def open_terminal_chat():
+    """Launch the interactive chat window in a visible terminal emulator."""
+    script_path = os.path.abspath(__file__)
+    work_dir = os.path.dirname(script_path)
+    python_bin = sys.executable
+
     try:
-        if system == "Linux" and shutil.which("notify-send"):
-            subprocess.run(["notify-send", "-a", "Antigravity Link", title, message[:100]], check=False, timeout=2)
-        elif system == "Windows":
-            ps = (
-                f'[reflection.assembly]::loadwithpartialname("System.Windows.Forms");'
-                f'$n = new-object system.windows.forms.notifyicon;'
-                f'$n.icon = [system.drawing.systemicons]::Information;'
-                f'$n.visible = $true;'
-                f'$n.showballoontip(10, "{title}", "{message[:100]}", [system.windows.forms.tooltipicon]::Info);'
-            )
-            subprocess.run(["powershell", "-NoProfile", "-Command", ps], check=False, timeout=3)
-    except Exception:
-        pass
+        if sys.platform == "win32":
+            wt = shutil.which("wt") or shutil.which("wt.exe")
+            if wt:
+                cmd = [wt, "-w", "0", "nt", "--title", "Antigravity Link Chat", python_bin, script_path, "chat"]
+                subprocess.Popen(cmd, cwd=work_dir)
+            else:
+                cmd = f'start "Antigravity Link Chat" "{python_bin}" "{script_path}" chat'
+                subprocess.Popen(cmd, cwd=work_dir, shell=True)
+        else:
+            terminator = shutil.which("terminator")
+            x_term = shutil.which("x-terminal-emulator")
+            gnome_term = shutil.which("gnome-terminal")
+            alacritty = shutil.which("alacritty")
+            kitty = shutil.which("kitty")
+
+            env = os.environ.copy()
+            if "DISPLAY" not in env:
+                env["DISPLAY"] = ":0"
+
+            if terminator:
+                cmd = [terminator, "-T", "Antigravity Link Chat", f"--working-directory={work_dir}", "-x", python_bin, script_path, "chat"]
+            elif gnome_term:
+                cmd = [gnome_term, "--title=Antigravity Link Chat", f"--working-directory={work_dir}", "--", python_bin, script_path, "chat"]
+            elif alacritty:
+                cmd = [alacritty, "-t", "Antigravity Link Chat", f"--working-directory={work_dir}", "-e", python_bin, script_path, "chat"]
+            elif kitty:
+                cmd = [kitty, "-T", "Antigravity Link Chat", f"-d={work_dir}", python_bin, script_path, "chat"]
+            elif x_term:
+                cmd = [x_term, "-T", "Antigravity Link Chat", "-e", f"{python_bin} {script_path} chat"]
+            else:
+                cmd = ["xterm", "-title", "Antigravity Link Chat", "-e", f"cd {work_dir} && {python_bin} {script_path} chat"]
+
+            subprocess.Popen(cmd, cwd=work_dir, env=env)
+    except Exception as e:
+        log_activity(f"Failed to open terminal chat window: {e}")
+
+
+def open_inbox_window():
+    """Open INBOX.md in default editor or viewer."""
+    script_path = os.path.abspath(__file__)
+    work_dir = os.path.dirname(script_path)
+    inbox_path = os.path.join(work_dir, "INBOX.md")
+    try:
+        if sys.platform == "win32":
+            os.startfile(inbox_path)
+        else:
+            xdg_open = shutil.which("xdg-open")
+            if xdg_open:
+                subprocess.Popen([xdg_open, inbox_path])
+    except Exception as e:
+        log_activity(f"Failed to open inbox window: {e}")
+
+
+def notify_desktop(title, message):
+    """Emit interactive desktop notification with clickable actions on Linux and Windows."""
+    def _worker():
+        system = platform.system()
+        try:
+            if system == "Linux" and shutil.which("notify-send"):
+                proc = subprocess.run(
+                    [
+                        "notify-send",
+                        "-a", "Antigravity Link",
+                        "-i", "dialog-information",
+                        "-A", "default=Open Chat",
+                        "-A", "chat=Open Chat",
+                        "-A", "inbox=View Inbox",
+                        title,
+                        message[:120]
+                    ],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    timeout=25
+                )
+                action = (proc.stdout or "").strip().lower()
+                if action in ("default", "chat"):
+                    open_terminal_chat()
+                elif action == "inbox":
+                    open_inbox_window()
+            elif system == "Windows":
+                script_dir = os.path.dirname(os.path.abspath(__file__))
+                notify_ps1 = os.path.join(script_dir, "notify_windows.ps1")
+                if os.path.exists(notify_ps1):
+                    clean_title = title.replace('"', '`"')
+                    clean_msg = message[:120].replace('"', '`"')
+                    cmd = [
+                        "powershell",
+                        "-NoProfile",
+                        "-ExecutionPolicy", "Bypass",
+                        "-File", notify_ps1,
+                        "-Title", clean_title,
+                        "-Message", clean_msg
+                    ]
+                    subprocess.run(cmd, check=False, timeout=20)
+                else:
+                    clean_title = title.replace('"', '`"')
+                    clean_msg = message[:100].replace('"', '`"')
+                    ps = (
+                        f'[reflection.assembly]::loadwithpartialname("System.Windows.Forms");'
+                        f'$n = new-object system.windows.forms.notifyicon;'
+                        f'$n.icon = [system.drawing.systemicons]::Information;'
+                        f'$n.visible = $true;'
+                        f'$n.showballoontip(10, "{clean_title}", "{clean_msg}", [system.windows.forms.tooltipicon]::Info);'
+                    )
+                    subprocess.run(["powershell", "-NoProfile", "-Command", ps], check=False, timeout=3)
+        except Exception:
+            pass
+
+    threading.Thread(target=_worker, daemon=True).start()
+
 
 
 # -----------------------------------------------------------------------------
@@ -864,6 +965,55 @@ def cmd_summon(args, config):
 
 def main():
     config = load_config()
+
+    # 1. Zero arguments defaults directly to live terminal chat!
+    if len(sys.argv) == 1:
+        return cmd_chat(None, config)
+
+    # 2. Ultra-simple CLI shortcuts (no flags or quotes required):
+    first_arg = sys.argv[1].lower()
+
+    if first_arg in ("ai", "@ai", "both", "@both"):
+        task = " ".join(sys.argv[2:]).strip()
+        if not task:
+            print("⚡ Usage: link ai <task prompt>")
+            return 1
+        args = argparse.Namespace(prompt=task, target="both")
+        return cmd_summon(args, config)
+
+    if first_arg in ("senpai", "@senpai", "win", "@win", "windows", "@windows"):
+        task = " ".join(sys.argv[2:]).strip()
+        if not task:
+            print("⚡ Usage: link senpai <task prompt>")
+            return 1
+        args = argparse.Namespace(prompt=task, target="senpai")
+        return cmd_summon(args, config)
+
+    if first_arg in ("reaper", "@reaper", "linux", "@linux"):
+        task = " ".join(sys.argv[2:]).strip()
+        if not task:
+            print("⚡ Usage: link reaper <task prompt>")
+            return 1
+        args = argparse.Namespace(prompt=task, target="reaper")
+        return cmd_summon(args, config)
+
+    if first_arg in ("chat", "@chat"):
+        return cmd_chat(None, config)
+
+    if first_arg in ("open", "popup"):
+        open_terminal_chat()
+        return 0
+
+    if first_arg == "pull":
+        repo_dir = os.path.dirname(os.path.abspath(__file__))
+        print("[+] Pulling latest updates from GitHub main branch...")
+        subprocess.run(["git", "pull", "origin", "main"], cwd=repo_dir)
+        return 0
+
+    if first_arg == "send" and len(sys.argv) > 2 and not any(a.startswith("-") for a in sys.argv[2:]):
+        msg_text = " ".join(sys.argv[2:]).strip()
+        args = argparse.Namespace(message=msg_text, agent=False)
+        return cmd_send(args, config)
 
     parser = argparse.ArgumentParser(description="Antigravity Link - Peer AI Sync Tool")
     parser.add_argument("--peer-host", help="Override peer target IP/hostname")

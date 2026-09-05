@@ -10,18 +10,38 @@
 
 ---
 
-## 🛠️ Essential Commands
+## ⚡ Ultra-Simple Global Commands (`link`)
+Run these from **ANY** terminal window without changing directories:
 
-| Action | Linux Command (@Mr-Reaper) | Windows Command (@Senpai59) |
+| Action | Quick Command (No Quotes Needed!) | What it Does |
 | :--- | :--- | :--- |
-| **Check Peer Status** | `python3 agy_link.py status` | `python agy_link.py status` |
-| **Start Background Daemon** | `./run_link_linux.sh` | Double-click `run_link_windows.bat` (Option 3) |
-| **Interactive Terminal Chat** | `python3 agy_link.py chat` | `python agy_link.py chat` (Option 1) |
-| **Broadcast Active Task** | `python3 agy_link.py sync --task "..."` | `python agy_link.py sync --task "..."` |
-| **Delegate Task to Other OS** | `python3 agy_link.py delegate --title "..." --target-os windows` | `python agy_link.py delegate --title "..." --target-os linux` |
-| **View Peer Inbox** | `python3 agy_link.py inbox` | `python agy_link.py inbox` |
-| **Summon Both AI Agents** | `python3 agy_link.py summon "..." --target both` | `python agy_link.py summon "..." --target both` (Option 8) |
-| **Summon Remote AI Only** | `python3 agy_link.py summon "..." --target remote` | `python agy_link.py summon "..." --target remote` |
+| **Open Chat** | `link` or `link chat` | Launches two-way terminal chat with zero setup |
+| **Summon Both AIs** | `link ai <task>` | Dispatches task to **both** Linux & Windows AIs in parallel |
+| **Summon Senpai's AI** | `link senpai <task>` | Hands off task to Senpai's Windows 11 AI exclusively |
+| **Summon Reaper's AI** | `link reaper <task>` | Executes task on Reaper's local Linux AI exclusively |
+| **Send Message** | `link send <message>` | Sends direct chat alert to peer |
+| **Check Peer Status** | `link status` | Displays live network state and active locks |
+| **View Peer Inbox** | `link inbox` | Displays latest peer messages and AI reports |
+| **Pull Updates** | `link pull` | Runs `git pull origin main` automatically |
+| **Open Chat Window** | `link open` | Pops up chat in a new Terminator / Windows Terminal window |
+
+---
+
+## 🔔 Interactive Clickable Notifications
+When you receive a chat message, task handoff, or AI report:
+* **Linux:** Click the popup banner or select **"Open Chat"** to pop up Terminator with the live chat. Click **"View Inbox"** to open `INBOX.md`.
+* **Windows:** Click the balloon notification to immediately pop up Windows Terminal or Command Prompt directly into the chat session!
+
+---
+
+## 🛠️ Full Verbose Syntax Reference
+
+| Action | Linux Full Command | Windows Full Command |
+| :--- | :--- | :--- |
+| **Start Background Daemon** | `./run_link_linux.sh` | `run_link_windows.bat` (Option 3) |
+| **Install Shortcuts & Protocol** | `~/.local/bin/link` | `powershell -File install_windows_shortcuts.ps1` (Option 9) |
+| **Broadcast Active Task** | `link sync --task "..."` | `link sync --task "..."` |
+| **Delegate Task to Other OS** | `link delegate --title "..."` | `link delegate --title "..."` |
 
 ---
 
