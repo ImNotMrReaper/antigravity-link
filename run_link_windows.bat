@@ -16,7 +16,7 @@ echo   [5] Check Link & Peer Status
 echo   [6] View Peer Inbox (INBOX.md)
 echo   [7] Broadcast State Sync
 echo   [8] Summon AI Agent (@ai / @both / @senpai / @reaper)
-echo   [9] Install Global 'link' Command & Desktop Shortcuts
+echo   [9] Install 'link' Command, Shortcuts & AGY Plugin
 echo   [10] Install Auto-Start on Windows Login
 echo   [11] Exit
 echo ============================================================

@@ -57,8 +57,49 @@ $smShortcut.Description = "Launch Antigravity Link Chat"
 $smShortcut.Save()
 Write-Host "[✓] Created Start Menu Shortcut: '$smShortcutFile'" -ForegroundColor Green
 
+# 5. Install AGY Plugin Globally in ~/.gemini/config/plugins/
+$userProfile = [Environment]::GetFolderPath("UserProfile")
+$geminiConfig = Join-Path $userProfile ".gemini\config"
+$pluginsDir = Join-Path $geminiConfig "plugins"
+$targetPlugin = Join-Path $pluginsDir "antigravity-link"
+$sourcePlugin = Join-Path $repoDir ".agents\plugins\antigravity-link"
+
+if (Test-Path $sourcePlugin) {
+    if (-not (Test-Path $pluginsDir)) {
+        New-Item -ItemType Directory -Path $pluginsDir -Force | Out-Null
+    }
+    if (Test-Path $targetPlugin) {
+        Remove-Item -Recurse -Force $targetPlugin | Out-Null
+    }
+    Copy-Item -Recurse -Force $sourcePlugin $targetPlugin
+    
+    # Save repo root so plugin's MCP server can resolve agy_link.py from anywhere
+    Set-Content -Path (Join-Path $targetPlugin "repo_path.txt") -Value $repoDir -Encoding UTF8
+    
+    # Configure global plugins.json
+    $pluginsJson = Join-Path $geminiConfig "plugins.json"
+    $configObj = @{
+        entries = @(
+            @{ path = "~/.gemini/config/plugins/antigravity-link" }
+        )
+    }
+    $configObj | ConvertTo-Json -Depth 3 | Set-Content -Path $pluginsJson -Encoding UTF8
+    
+    Write-Host "[✓] Installed AGY Plugin to '$targetPlugin'" -ForegroundColor Green
+    Write-Host "[✓] Configured global plugins registry in '$pluginsJson'" -ForegroundColor Green
+
+    # Validate plugin if agy CLI is present
+    $agyCmd = Get-Command "agy" -ErrorAction SilentlyContinue
+    if ($agyCmd) {
+        Write-Host "🔍 Validating AGY plugin with agy CLI..." -ForegroundColor Cyan
+        & agy plugin validate "$targetPlugin"
+    }
+}
+
 Write-Host "`n🎉 Installation complete! Senpai can now:" -ForegroundColor Yellow
 Write-Host "   1. Type 'link' or 'link chat' in any PowerShell/CMD window."
 Write-Host "   2. Type 'link ai <task>' to summon both AIs."
 Write-Host "   3. Double-click 'Antigravity Link Chat' on the Windows Desktop."
-Write-Host "   4. Click on incoming desktop notifications to pop up the chat!" -ForegroundColor Yellow
+Write-Host "   4. Click on incoming desktop notifications to pop up the chat!"
+Write-Host "   5. Use AGY Link directly inside Antigravity (AGY) sessions via native tools/skills!" -ForegroundColor Yellow
+

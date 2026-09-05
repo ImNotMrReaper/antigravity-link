@@ -53,3 +53,21 @@ When you receive a chat message, task handoff, or AI report:
 | `@senpai-ai <task>` | Wakes up Senpai's **Windows AI** agent only to execute on Senpai's PC |
 | `@reaper-ai <task>` | Wakes up Reaper's **Linux AI** agent only to execute on Reaper's PC |
 | *(normal text)* | Clean human-to-human terminal chat with **zero AI noise** |
+
+---
+
+## 🧩 Antigravity (AGY) Plugin & MCP Integration
+The repo includes a native AGY plugin located in `.agents/plugins/antigravity-link`. When installed, Antigravity has native tools and skills to interact with the link directly from inside your AGY coding sessions:
+
+### Exposed MCP Tools (Pure Python stdio JSON-RPC):
+- `link_status`: Check peer node connection and active file locks.
+- `link_summon`: Summon peer AI (`prompt`, `target: both|senpai|reaper`).
+- `link_send`: Send direct message to peer station.
+- `link_sync`: Broadcast active task and lock files (`task`, `status`, `files`).
+- `link_inbox`: Read recent messages and task handoffs from `INBOX.md`.
+
+### 1-Click Installation:
+- **Linux:** Run `./install_linux_shortcuts.sh`
+- **Windows:** Run `install_windows_shortcuts.ps1` (or Option `[9]` in `run_link_windows.bat`)
+- **Validate:** Run `agy plugin validate ~/.gemini/config/plugins/antigravity-link`
+
