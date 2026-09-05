@@ -1,0 +1,15 @@
+[Unit]
+Description=Antigravity Link Peer AI Collaboration Daemon
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/mr-reaper/PycharmProjects/antigravity-link
+ExecStart=/usr/bin/python3 -u /home/mr-reaper/PycharmProjects/antigravity-link/agy_link.py --user Mr-Reaper --peer Senpai listen
+Restart=always
+RestartSec=5s
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,16 @@
+# Local runtime state & inbox
+config.json
+INBOX.md
+LATEST.json
+
+# Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Environment
+.venv/
+venv/
+.idea/
+.vscode/
