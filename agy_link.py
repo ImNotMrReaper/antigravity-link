@@ -43,12 +43,13 @@ DEFAULT_PORT = 7890
 DEFAULT_ROOM = "agy_link_mrreaper_senpai_8829"
 RELAY_HOST = "https://ntfy.sh"
 
-AGY_DIR = ".agy_link"
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+AGY_DIR = os.path.join(SCRIPT_DIR, ".agy_link")
 CONFIG_FILE = os.path.join(AGY_DIR, "config.json")
 LOCAL_STATE_FILE = os.path.join(AGY_DIR, "local_state.json")
 PEER_STATE_FILE = os.path.join(AGY_DIR, "peer_state.json")
 ACTIVITY_LOG_FILE = os.path.join(AGY_DIR, "activity.log")
-INBOX_FILE = "INBOX.md"
+INBOX_FILE = os.path.join(SCRIPT_DIR, "INBOX.md")
 
 # Configure Windows UTF-8 stdout/stderr safety
 if sys.platform == "win32":
@@ -388,13 +389,15 @@ class NetworkTransport:
     def send(self, packet):
         """Hybrid dispatch: Try direct TCP first; fall back to cloud relay automatically."""
         mode = self.config.get("mode", "hybrid")
+        msg = "TCP not attempted"
 
         if mode in ("direct", "hybrid"):
-            ok, msg = self.send_direct_tcp(packet)
-            if ok:
-                return True, msg
-            if mode == "direct":
-                return False, f"Direct TCP failed: {msg}"
+            if not (mode == "hybrid" and self.peer_host in ("127.0.0.1", "localhost", "0.0.0.0")):
+                ok, msg = self.send_direct_tcp(packet)
+                if ok:
+                    return True, msg
+                if mode == "direct":
+                    return False, f"Direct TCP failed: {msg}"
 
         # Hybrid fallback or relay mode
         ok_relay, msg_relay = self.send_relay(packet)
