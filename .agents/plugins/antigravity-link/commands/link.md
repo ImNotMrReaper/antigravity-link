@@ -25,12 +25,12 @@ Parse the user's arguments following `/link`:
    - Dispatch the task to the peer AI agent (or both) using `link_summon` or `python3 agy_link.py summon "<task>" --target both`.
    - Wait for the remote report to arrive, and present the formatted report directly in chat.
 
-4. **`/link senpai <task>`**:
-   - Dispatch task directly to Senpai's Windows 11 machine via `python3 agy_link.py summon "<task>" --target senpai`.
-   - Wait for Senpai's AI report and display it in this conversation.
+4. **`/link peer <task>` (or `/link senpai <task>`)**:
+   - Dispatch task directly to remote peer machine via `python3 agy_link.py summon "<task>" --target peer`.
+   - Wait for the remote peer AI report and display it in this conversation.
 
-5. **`/link reaper <task>`**:
-   - Execute task on local Linux station via `python3 agy_link.py summon "<task>" --target reaper`.
+5. **`/link local <task>` (or `/link reaper <task>`)**:
+   - Execute task on local station via `python3 agy_link.py summon "<task>" --target local`.
    - Report the result in this conversation.
 
 6. **`/link inbox`**:

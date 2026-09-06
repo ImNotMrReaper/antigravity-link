@@ -98,6 +98,14 @@ def main():
             sender = data.get("sender", {})
             user = sender.get("user", "Peer AI")
 
+            if status == "quarantined":
+                reason = state.get("reason", "Suspicious instruction pattern detected")
+                print(json.dumps({
+                    "decision": "deny",
+                    "reason": f"Antigravity Link Immune System: Execution blocked because peer connection is QUARANTINED ({reason}). Clear via 'link unquarantine'."
+                }))
+                return
+
             if status == "in-progress" and locked_files and not is_lock_expired(data.get("last_updated")):
                 for lf in locked_files:
                     lf_clean = lf.strip().lower().replace("\\", "/")

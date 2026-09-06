@@ -32,7 +32,7 @@ case "$1" in
         shift
         exec python3 "$REPO_DIR/agy_link.py" summon "$*" --target both
         ;;
-    senpai|remote)
+    peer|senpai|remote)
         shift
         exec python3 "$REPO_DIR/agy_link.py" summon "$*" --target senpai
         ;;

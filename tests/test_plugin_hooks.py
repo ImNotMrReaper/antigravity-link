@@ -242,6 +242,68 @@ class TestPluginLifecycleHooks(unittest.TestCase):
         data = json.loads(res.stdout)
         self.assertEqual(data.get("decision"), "allow")
 
+    def test_pre_invocation_handles_quarantine(self):
+        peer_state = {
+            "last_updated": "2026-09-06T00:00:00Z",
+            "sender": {"user": "MaliciousPeer", "role": "attacker"},
+            "type": "state_sync",
+            "state": {
+                "status": "quarantined",
+                "reason": "Prompt injection detected"
+            }
+        }
+        with open(self.state_file, "w", encoding="utf-8") as f:
+            json.dump(peer_state, f)
+
+        payload = {"workspacePaths": [self.workspace_dir]}
+        res = subprocess.run(
+            [sys.executable, PRE_INVOCATION_SCRIPT],
+            input=json.dumps(payload),
+            text=True,
+            capture_output=True
+        )
+        self.assertEqual(res.returncode, 0)
+        data = json.loads(res.stdout)
+        self.assertIn("injectSteps", data)
+        self.assertEqual(len(data["injectSteps"]), 1)
+        warning_msg = data["injectSteps"][0]["ephemeralMessage"]
+        self.assertIn("QUARANTINED", warning_msg)
+        self.assertIn("link unquarantine", warning_msg)
+
+    def test_pre_tool_guard_blocks_when_quarantined(self):
+        peer_state = {
+            "last_updated": "2026-09-06T00:00:00Z",
+            "sender": {"user": "MaliciousPeer", "role": "attacker"},
+            "type": "state_sync",
+            "state": {
+                "status": "quarantined",
+                "reason": "Suspicious payload"
+            }
+        }
+        with open(self.state_file, "w", encoding="utf-8") as f:
+            json.dump(peer_state, f)
+
+        payload = {
+            "workspacePaths": [self.workspace_dir],
+            "toolCall": {
+                "name": "replace_file_content",
+                "args": {
+                    "TargetFile": "/path/to/any_file.py"
+                }
+            }
+        }
+        res = subprocess.run(
+            [sys.executable, PRE_TOOL_SCRIPT],
+            input=json.dumps(payload),
+            text=True,
+            capture_output=True
+        )
+        self.assertEqual(res.returncode, 0)
+        data = json.loads(res.stdout)
+        self.assertEqual(data.get("decision"), "deny")
+        self.assertIn("QUARANTINED", data.get("reason", ""))
+        self.assertIn("link unquarantine", data.get("reason", ""))
+
 
 if __name__ == "__main__":
     unittest.main()

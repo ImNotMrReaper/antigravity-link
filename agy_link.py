@@ -231,13 +231,107 @@ def notify_desktop(title, message):
 # -----------------------------------------------------------------------------
 
 
+SEEN_PACKETS = set()
+
+
+def verify_packet_freshness(packet, max_drift_seconds=60):
+    """Prevent replay attacks and stale packet injection."""
+    packet_id = packet.get("packet_id")
+    if not packet_id:
+        return False
+    if packet_id in SEEN_PACKETS:
+        return False  # Replay detected
+
+    packet_epoch = packet.get("timestamp_epoch")
+    if packet_epoch is None:
+        ts = packet.get("timestamp")
+        if ts:
+            try:
+                dt = datetime.datetime.fromisoformat(ts.replace("Z", "+00:00"))
+                packet_epoch = dt.timestamp()
+            except Exception:
+                pass
+
+    if packet_epoch is not None:
+        drift = abs(time.time() - packet_epoch)
+        if drift > max_drift_seconds:
+            return False  # Stale packet exceeding drift window
+
+    SEEN_PACKETS.add(packet_id)
+    if len(SEEN_PACKETS) > 2000:
+        SEEN_PACKETS.clear()
+    return True
+
+
+INJECTION_KEYWORDS = [
+    "ignore previous instructions",
+    "disregard all previous",
+    "system prompt override",
+    "forget all prior instructions",
+    "bypass safety filters",
+    "exfiltrate secret",
+    "reveal secret key",
+    "read ~/.ssh",
+    "read /etc/shadow",
+    "rm -rf /",
+    "rmdir /s /q c:\\",
+    "Invoke-Expression",
+    ":(){ :|:& };:",
+    "mkfs.ext4",
+    "format c:"
+]
+
+
+def scan_for_prompt_injection(text):
+    """
+    Heuristic guard checking for prompt injections, jailbreaks, and destructive shell payloads.
+    Returns (is_suspicious: bool, matching_trigger: str).
+    """
+    if not text or not isinstance(text, str):
+        return False, ""
+    lower = text.lower()
+    for kw in INJECTION_KEYWORDS:
+        if kw.lower() in lower:
+            return True, kw
+    return False, ""
+
+
+def quarantine_peer(sender_info, reason, packet=None):
+    """Quarantine peer connection upon detecting malicious injection attempt."""
+    ensure_dirs()
+    user = sender_info.get("user", "Unknown")
+    node = sender_info.get("node_id", "unknown")
+
+    state_data = {
+        "last_updated": get_iso_timestamp(),
+        "sender": sender_info,
+        "type": "security_alert",
+        "state": {
+            "status": "quarantined",
+            "reason": reason,
+            "task": f"QUARANTINED: {reason}",
+            "locked_files": []
+        }
+    }
+    try:
+        with open(PEER_STATE_FILE, "w", encoding="utf-8") as f:
+            json.dump(state_data, f, indent=2, ensure_ascii=False)
+    except Exception:
+        pass
+
+    log_activity(f"IMMUNE SYSTEM: Peer '{user}' ({node}) QUARANTINED! Reason: {reason}")
+    notify_desktop("Antigravity Link Security Warning", f"Peer {user} QUARANTINED: {reason}")
+
+
 def compute_packet_signature(packet, secret_key):
-    """Calculate HMAC-SHA256 signature for wire packet integrity."""
+    """Calculate HMAC-SHA256 signature for wire packet integrity including session salt."""
     if not secret_key:
         return ""
     try:
         data_to_sign = json.dumps({
             "version": packet.get("version"),
+            "packet_id": packet.get("packet_id", ""),
+            "salt": packet.get("salt", ""),
             "type": packet.get("type"),
             "timestamp": packet.get("timestamp"),
             "sender": packet.get("sender"),
@@ -249,25 +343,43 @@ def compute_packet_signature(packet, secret_key):
 
 
 def verify_packet_signature(packet, secret_key):
-    """Verify HMAC-SHA256 signature on incoming packet."""
+    """Verify HMAC-SHA256 signature on incoming packet with backward compatibility."""
     if not secret_key:
         return True
     received_sig = packet.get("signature", "")
     if not received_sig:
-        # Backward compatibility for legacy v1.0.0 packets if default auth_token matches
         if packet.get("auth_token") == "agy_token_8829":
             return True
         return False
     expected_sig = compute_packet_signature(packet, secret_key)
-    return hmac.compare_digest(expected_sig, received_sig)
+    if hmac.compare_digest(expected_sig, received_sig):
+        return True
+    # Backward compatibility fallback for legacy packets without salt/packet_id
+    try:
+        legacy_data = json.dumps({
+            "version": packet.get("version"),
+            "type": packet.get("type"),
+            "timestamp": packet.get("timestamp"),
+            "sender": packet.get("sender"),
+            "payload": packet.get("payload")
+        }, sort_keys=True, ensure_ascii=False)
+        legacy_sig = hmac.new(secret_key.encode("utf-8"), legacy_data.encode("utf-8"), hashlib.sha256).hexdigest()
+        if hmac.compare_digest(legacy_sig, received_sig):
+            return True
+    except Exception:
+        pass
+    return False
 
 
 def make_packet(packet_type, payload, config):
-    """Create standardized v1.1.0 JSON wire packet with HMAC signature."""
+    """Create standardized v1.1.0 JSON wire packet with HMAC signature and session salt."""
+    now_epoch = time.time()
     pkt = {
         "version": PROTOCOL_VERSION,
-        "packet_id": f"{int(time.time() * 1000)}-{os.urandom(3).hex()}",
+        "packet_id": f"{int(now_epoch * 1000)}-{os.urandom(3).hex()}",
         "timestamp": get_iso_timestamp(),
+        "timestamp_epoch": now_epoch,
+        "salt": config.get("session_salt", "SALT_8829"),
         "auth_token": config.get("auth_token", ""),
         "type": packet_type,
         "sender": {
@@ -610,9 +722,9 @@ def resolve_summon_target(raw_prefix, local_platform):
 
     if p in ("@both", "@all", "@ai", "@agy"):
         return "both"
-    elif p in ("@linux", "@linux-ai", "@reaper", "@reaper-ai"):
+    elif p in ("@linux", "@linux-ai", "@reaper", "@reaper-ai", "@local", "@self"):
         return "local" if is_linux else "remote"
-    elif p in ("@windows", "@windows-ai", "@win", "@win-ai", "@senpai", "@senpai-ai"):
+    elif p in ("@windows", "@windows-ai", "@win", "@win-ai", "@senpai", "@senpai-ai", "@peer", "@peer-ai", "@remote"):
         return "remote" if is_linux else "local"
     return "both"
 
@@ -938,6 +1050,21 @@ def cmd_daemon(args, config):
             log_activity(f"Security Gate: Dropped packet from {sender.get('user')} with invalid HMAC signature.")
             return
 
+        # Anti-Replay & Freshness Gate
+        if not verify_packet_freshness(packet, max_drift_seconds=60):
+            print(f"\n🛡️  [SECURITY GATE] Dropped stale or replayed packet from {sender.get('user', 'unknown')} (ID: {packet.get('packet_id')}).", flush=True)
+            log_activity(f"Security Gate: Dropped stale/replayed packet from {sender.get('user')}")
+            return
+
+        # Prompt Injection Immune System Check
+        if p_type in ("agent_summon", "task_delegation"):
+            raw_text = payload.get("task") or payload.get("description") or ""
+            is_suspicious, trigger = scan_for_prompt_injection(raw_text)
+            if is_suspicious:
+                quarantine_peer(sender, f"Suspicious instruction pattern: '{trigger}'", packet)
+                print(f"\n🚨 [IMMUNE SYSTEM] QUARANTINED peer {sender.get('user')}! Detected: '{trigger}'", flush=True)
+                return
+
         print(f"\n🔔 [{datetime.datetime.now().strftime('%H:%M:%S')}] Received [{p_type.upper()}] from {sender.get('user')}:", flush=True)
         if p_type == "state_sync":
             print(f"   Task:   {payload.get('task')} [{payload.get('status')}]", flush=True)
@@ -1007,6 +1134,21 @@ def cmd_chat(args, config):
             print(f"\n🛡️  [SECURITY GATE] Dropped unauthenticated packet from {sender.get('user', 'unknown')}! Invalid signature.\n> ", end="", flush=True)
             log_activity(f"Security Gate: Dropped chat packet from {sender.get('user')} with invalid HMAC signature.")
             return
+
+        # Anti-Replay & Freshness Gate
+        if not verify_packet_freshness(packet, max_drift_seconds=60):
+            print(f"\n🛡️  [SECURITY GATE] Dropped stale/replayed packet (ID: {packet.get('packet_id')}).\n> ", end="", flush=True)
+            log_activity(f"Security Gate: Dropped stale/replayed packet in chat from {sender.get('user')}")
+            return
+
+        # Prompt Injection Immune System Check
+        if p_type in ("agent_summon", "task_delegation"):
+            raw_text = payload.get("task") or payload.get("description") or ""
+            is_suspicious, trigger = scan_for_prompt_injection(raw_text)
+            if is_suspicious:
+                quarantine_peer(sender, f"Suspicious instruction pattern: '{trigger}'", packet)
+                print(f"\n🚨 [IMMUNE SYSTEM] QUARANTINED peer {sender.get('user')}! Detected: '{trigger}'\n> ", end="", flush=True)
+                return
 
         if p_type == "chat":
             text = payload.get("text", "")
@@ -1199,6 +1341,103 @@ def cmd_security(args, config):
     return 0
 
 
+def cmd_unquarantine(args, config):
+    """Release peer node from security quarantine."""
+    ensure_dirs()
+    if os.path.exists(PEER_STATE_FILE):
+        try:
+            with open(PEER_STATE_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            data["state"]["status"] = "idle"
+            data["state"]["reason"] = "Quarantine cleared by operator"
+            with open(PEER_STATE_FILE, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+            print("✅ Quarantine successfully cleared. Peer connection restored to idle.")
+            log_activity("Security Gate: Operator cleared peer quarantine.")
+            return 0
+        except Exception as e:
+            print(f"Error clearing quarantine: {e}")
+            return 1
+    print("No active peer state found.")
+    return 0
+
+
+def cmd_init(args, config):
+    """Interactive zero-friction onboarding wizard."""
+    print("=" * 60)
+    print("🚀 Antigravity Link — Interactive Setup Wizard")
+    print("=" * 60)
+
+    # 1. Developer Handle
+    default_user = os.environ.get("USER") or os.environ.get("USERNAME") or "Developer"
+    try:
+        user_input = input(f"1. Enter your developer handle [{default_user}]: ").strip()
+    except (EOFError, KeyboardInterrupt):
+        user_input = ""
+    config["user"] = user_input or default_user
+    config["node_id"] = f"{config['user'].lower().replace(' ', '-')}-{platform.system().lower()[:3]}"
+
+    # 2. Hierarchy Role
+    print("\n2. Select your role in the collaboration hierarchy:")
+    print("   [1] Lead / Project Architect (holds main branch authority)")
+    print("   [2] Platform Lead (e.g. Windows/macOS specialist)")
+    print("   [3] Contributor (feature developer) [Default]")
+    print("   [4] Tester / QA (hardware & test suite validation)")
+    try:
+        role_choice = input("   Choice [1-4, default: 3]: ").strip()
+    except (EOFError, KeyboardInterrupt):
+        role_choice = "3"
+    role_map = {"1": "lead", "2": "platform_lead", "3": "contributor", "4": "tester"}
+    config["role"] = role_map.get(role_choice, "contributor")
+
+    # 3. Transport Mode
+    print("\n3. Select network transport mode:")
+    print("   [1] Cloud Relay (Zero-Config HTTPS via ntfy.sh) [Default]")
+    print("   [2] Hybrid (Direct TCP with Cloud Relay Fallback)")
+    print("   [3] Direct TCP LAN / Tailscale Socket Only")
+    try:
+        mode_choice = input("   Choice [1-3, default: 1]: ").strip()
+    except (EOFError, KeyboardInterrupt):
+        mode_choice = "1"
+    mode_map = {"1": "relay", "2": "hybrid", "3": "direct"}
+    config["mode"] = mode_map.get(mode_choice, "relay")
+
+    # 4. Room ID
+    default_room = config.get("relay_room", DEFAULT_ROOM)
+    try:
+        room_input = input(f"\n4. Enter Pairing Room ID [{default_room}]: ").strip()
+    except (EOFError, KeyboardInterrupt):
+        room_input = ""
+    config["relay_room"] = room_input or default_room
+
+    # 5. Secret Key & Ephemeral Salt
+    default_secret = config.get("secret_key", DEFAULT_SECRET)
+    print(f"\n5. Session Secret Key:")
+    print(f"   [1] Use shared room secret key")
+    print(f"   [2] Generate a new cryptographically secure secret key")
+    try:
+        sec_choice = input("   Choice [1-2, default: 1]: ").strip()
+    except (EOFError, KeyboardInterrupt):
+        sec_choice = "1"
+    if sec_choice == "2":
+        new_secret = f"agy_{os.urandom(12).hex()}"
+        config["secret_key"] = new_secret
+        print(f"   🔑 Generated new Secret Key: {new_secret}")
+    else:
+        config["secret_key"] = default_secret
+
+    config["session_salt"] = f"SALT_{os.urandom(4).hex().upper()}"
+
+    save_config(config)
+    print("\n" + "=" * 60)
+    print(f"✅ Setup complete! Configuration saved to {CONFIG_FILE}")
+    print(f"   Node:    {config['node_id']} ({config['user']} as {config['role']})")
+    print(f"   Room:    {config['relay_room']}")
+    print(f"   Mode:    {config['mode'].upper()}")
+    print("=" * 60)
+    return 0
+
+
 # -----------------------------------------------------------------------------
 # Main Entry Point
 # -----------------------------------------------------------------------------
@@ -1222,6 +1461,22 @@ def main():
         args = argparse.Namespace(prompt=task, target="both")
         return cmd_summon(args, config)
 
+    if first_arg in ("peer", "@peer", "remote", "@remote"):
+        task = " ".join(sys.argv[2:]).strip()
+        if not task:
+            print("⚡ Usage: link peer <task prompt>")
+            return 1
+        args = argparse.Namespace(prompt=task, target="peer")
+        return cmd_summon(args, config)
+
+    if first_arg in ("local", "@local", "self", "@self"):
+        task = " ".join(sys.argv[2:]).strip()
+        if not task:
+            print("⚡ Usage: link local <task prompt>")
+            return 1
+        args = argparse.Namespace(prompt=task, target="local")
+        return cmd_summon(args, config)
+
     if first_arg in ("senpai", "@senpai", "win", "@win", "windows", "@windows"):
         task = " ".join(sys.argv[2:]).strip()
         if not task:
@@ -1237,6 +1492,12 @@ def main():
             return 1
         args = argparse.Namespace(prompt=task, target="reaper")
         return cmd_summon(args, config)
+
+    if first_arg in ("init", "setup", "wizard"):
+        return cmd_init(None, config)
+
+    if first_arg in ("unquarantine", "clear-quarantine", "resume"):
+        return cmd_unquarantine(None, config)
 
     if first_arg in ("chat", "@chat"):
         return cmd_chat(None, config)
@@ -1296,7 +1557,7 @@ def main():
     p_summon.add_argument("prompt", help="Instruction or task for the AI agent")
     p_summon.add_argument(
         "--target",
-        choices=["both", "remote", "local", "windows", "linux", "senpai", "reaper"],
+        choices=["both", "remote", "local", "windows", "linux", "senpai", "reaper", "peer"],
         default="both",
         help="Which AI agent to trigger (default: both)"
     )
@@ -1343,6 +1604,10 @@ def main():
     p_sec = subparsers.add_parser("security", help="Inspect or set HITL security approval gate mode")
     p_sec.add_argument("mode_name", nargs="?", choices=["prompt", "session_trusted", "autonomous", "deny"], help="Security mode")
 
+    # init & unquarantine
+    subparsers.add_parser("init", help="Run interactive setup wizard")
+    subparsers.add_parser("unquarantine", help="Clear peer security quarantine status")
+
     args = parser.parse_args()
 
     if args.peer_host:
@@ -1378,6 +1643,10 @@ def main():
         return cmd_role(args, config)
     elif args.command == "security":
         return cmd_security(args, config)
+    elif args.command == "init":
+        return cmd_init(args, config)
+    elif args.command == "unquarantine":
+        return cmd_unquarantine(args, config)
     return 0
 
 
