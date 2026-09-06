@@ -91,32 +91,42 @@ def main():
             with open(state_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
 
-            state = data.get("state", {})
-            status = str(state.get("status", "")).lower()
-            locked_files = state.get("locked_files", [])
-            task = state.get("task", "Active task")
-            sender = data.get("sender", {})
-            user = sender.get("user", "Peer AI")
+            # Multi-peer swarm lock aggregation
+            nodes_to_check = []
+            peers = data.get("peers")
+            if isinstance(peers, dict) and peers:
+                nodes_to_check.extend(peers.values())
+            else:
+                nodes_to_check.append(data)
 
-            if status == "quarantined":
-                reason = state.get("reason", "Suspicious instruction pattern detected")
-                print(json.dumps({
-                    "decision": "deny",
-                    "reason": f"Antigravity Link Immune System: Execution blocked because peer connection is QUARANTINED ({reason}). Clear via 'link unquarantine'."
-                }))
-                return
+            for node_entry in nodes_to_check:
+                state = node_entry.get("state", {})
+                status = str(state.get("status", "")).lower()
+                locked_files = state.get("locked_files", [])
+                task = state.get("task", "Active task")
+                sender = node_entry.get("sender", {})
+                user = sender.get("user", "Peer AI")
+                updated_ts = node_entry.get("last_updated") or data.get("last_updated")
 
-            if status == "in-progress" and locked_files and not is_lock_expired(data.get("last_updated")):
-                for lf in locked_files:
-                    lf_clean = lf.strip().lower().replace("\\", "/")
-                    lf_base = os.path.basename(lf_clean)
-                    if lf_clean == target_norm or lf_base == target_base or target_norm.endswith(lf_clean):
-                        reason = (
-                            f"Antigravity Link Conflict Prevention: '{os.path.basename(target_file)}' is currently "
-                            f"locked by {user} working on '{task}'. Coordinate with peer before overwriting."
-                        )
-                        print(json.dumps({"decision": "ask", "reason": reason}))
-                        return
+                if status == "quarantined":
+                    reason = state.get("reason", "Suspicious instruction pattern detected")
+                    print(json.dumps({
+                        "decision": "deny",
+                        "reason": f"Antigravity Link Immune System: Execution blocked because peer {user} is QUARANTINED ({reason}). Clear via 'link unquarantine'."
+                    }))
+                    return
+
+                if status == "in-progress" and locked_files and not is_lock_expired(updated_ts):
+                    for lf in locked_files:
+                        lf_clean = lf.strip().lower().replace("\\", "/")
+                        lf_base = os.path.basename(lf_clean)
+                        if lf_clean == target_norm or lf_base == target_base or target_norm.endswith(lf_clean):
+                            reason = (
+                                f"Antigravity Link Conflict Prevention: '{os.path.basename(target_file)}' is currently "
+                                f"locked by {user} working on '{task}'. Coordinate with peer before overwriting."
+                            )
+                            print(json.dumps({"decision": "ask", "reason": reason}))
+                            return
         except Exception:
             pass
 

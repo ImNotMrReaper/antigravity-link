@@ -241,8 +241,11 @@ def notify_desktop(title, message):
 SEEN_PACKETS = set()
 
 
-def verify_packet_freshness(packet, max_drift_seconds=60):
-    """Prevent replay attacks and stale packet injection."""
+def verify_packet_freshness(packet, max_drift_seconds=60, allow_resync=True):
+    """
+    Prevent replay attacks and stale packet injection.
+    Allows dynamic clock re-synchronization on cryptographically signed handshake/ping packets.
+    """
     packet_id = packet.get("packet_id")
     if not packet_id:
         return False
@@ -259,6 +262,12 @@ def verify_packet_freshness(packet, max_drift_seconds=60):
             except Exception:
                 pass
 
+    p_type = packet.get("type", "")
+    # Allow signed handshake / ping / resync packets to dynamically re-synchronize time window
+    if allow_resync and p_type in ("handshake", "ping", "resync_request", "resync_ack"):
+        SEEN_PACKETS.add(packet_id)
+        return True
+
     if packet_epoch is not None:
         drift = abs(time.time() - packet_epoch)
         if drift > max_drift_seconds:
@@ -270,7 +279,7 @@ def verify_packet_freshness(packet, max_drift_seconds=60):
     return True
 
 
-INJECTION_KEYWORDS = [
+CRITICAL_META_INJECTIONS = [
     "ignore previous instructions",
     "disregard all previous",
     "system prompt override",
@@ -279,7 +288,10 @@ INJECTION_KEYWORDS = [
     "exfiltrate secret",
     "reveal secret key",
     "read ~/.ssh",
-    "read /etc/shadow",
+    "read /etc/shadow"
+]
+
+DESTRUCTIVE_EXECUTION_KEYWORDS = [
     "rm -rf /",
     "rmdir /s /q c:\\",
     "Invoke-Expression",
@@ -288,18 +300,45 @@ INJECTION_KEYWORDS = [
     "format c:"
 ]
 
+INJECTION_KEYWORDS = CRITICAL_META_INJECTIONS + DESTRUCTIVE_EXECUTION_KEYWORDS
 
-def scan_for_prompt_injection(text):
+
+def strip_markdown_code(text):
     """
-    Heuristic guard checking for prompt injections, jailbreaks, and destructive shell payloads.
+    Strips fenced code blocks (```...```) and inline code spans (`...`)
+    to prevent false-positive quarantines during legitimate code reviews and unit test assertions.
+    """
+    if not text or not isinstance(text, str):
+        return ""
+    clean = re.sub(r"```[\s\S]*?```", " ", text)
+    clean = re.sub(r"`[^`\n]+`", " ", clean)
+    return clean
+
+
+def scan_for_prompt_injection(text, context_aware=True):
+    """
+    Context-aware heuristic guard checking for prompt injections, jailbreaks, and destructive shell payloads.
+    When context_aware=True, code blocks are stripped before evaluating destructive shell commands,
+    preventing false positives when discussing test scripts or shell utilities.
+    Critical meta-prompt injections (jailbreaks, credential exfiltration) are always checked globally.
     Returns (is_suspicious: bool, matching_trigger: str).
     """
     if not text or not isinstance(text, str):
         return False, ""
-    lower = text.lower()
-    for kw in INJECTION_KEYWORDS:
-        if kw.lower() in lower:
+
+    lower_raw = text.lower()
+
+    # 1. Critical meta-prompt injections are NEVER permitted anywhere in the payload
+    for kw in CRITICAL_META_INJECTIONS:
+        if kw.lower() in lower_raw:
             return True, kw
+
+    # 2. Destructive execution commands are checked against conversational text
+    eval_text = strip_markdown_code(text).lower() if context_aware else lower_raw
+    for kw in DESTRUCTIVE_EXECUTION_KEYWORDS:
+        if kw.lower() in eval_text:
+            return True, kw
+
     return False, ""
 
 
@@ -415,12 +454,34 @@ def update_peer_state(packet):
     payload = packet.get("payload", {})
     p_type = packet.get("type", "message")
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    node_key = sender.get("node_id") or sender.get("user") or "peer-node"
+
+    # Multi-peer swarm table management
+    peers_table = {}
+    if os.path.exists(PEER_STATE_FILE):
+        try:
+            with open(PEER_STATE_FILE, "r", encoding="utf-8") as f:
+                existing = json.load(f)
+                peers_table = existing.get("peers", {})
+                if not isinstance(peers_table, dict):
+                    peers_table = {}
+        except Exception:
+            peers_table = {}
+
+    # Record or update entry for this specific peer
+    peers_table[node_key] = {
+        "last_updated": get_iso_timestamp(),
+        "sender": sender,
+        "type": p_type,
+        "state": payload
+    }
 
     state_data = {
         "last_updated": get_iso_timestamp(),
         "sender": sender,
         "type": p_type,
         "state": payload,
+        "peers": peers_table  # Multi-peer swarm table
     }
 
     try:
@@ -1063,15 +1124,28 @@ def cmd_status(args, config):
         try:
             with open(PEER_STATE_FILE, "r", encoding="utf-8") as f:
                 p_state = json.load(f)
-                sender = p_state.get("sender", {})
-                st = p_state.get("state", {})
-                print("------------------------------------------------------------")
-                print(f"Peer Node:      {sender.get('user')} ({sender.get('role')})")
-                print(f"Last Active:    {p_state.get('last_updated')}")
-                if st.get("task"):
-                    print(f"Active Task:    {st.get('task')} [{st.get('status')}]")
-                if st.get("locked_files"):
-                    print(f"Locked Files:   {', '.join(st.get('locked_files'))}")
+                peers_table = p_state.get("peers", {})
+                if isinstance(peers_table, dict) and len(peers_table) > 1:
+                    print("------------------------------------------------------------")
+                    print(f"Swarm Mesh:     🌐 {len(peers_table)} Nodes Connected")
+                    for nid, nentry in peers_table.items():
+                        ns = nentry.get("sender", {})
+                        nst = nentry.get("state", {})
+                        nuser = ns.get("user") or nid
+                        nrole = ns.get("role", "peer")
+                        print(f"  • {nuser} ({nrole}) [{nst.get('status', 'active')}]: {nst.get('task', 'idle')}")
+                        if nst.get("locked_files"):
+                            print(f"    🔒 Locks: {', '.join(nst.get('locked_files'))}")
+                else:
+                    sender = p_state.get("sender", {})
+                    st = p_state.get("state", {})
+                    print("------------------------------------------------------------")
+                    print(f"Peer Node:      {sender.get('user')} ({sender.get('role')})")
+                    print(f"Last Active:    {p_state.get('last_updated')}")
+                    if st.get("task"):
+                        print(f"Active Task:    {st.get('task')} [{st.get('status')}]")
+                    if st.get("locked_files"):
+                        print(f"Locked Files:   {', '.join(st.get('locked_files'))}")
         except Exception:
             pass
     print("============================================================")
