@@ -263,16 +263,39 @@ def notify_desktop(title, message):
                     timeout=5
                 )
             elif system == "Windows":
-                clean_title = title.replace('"', '`"')
-                clean_msg_win = clean_msg[:100].replace('"', '`"')
+                xml_title = html.escape(title[:64]).replace('`', '``').replace('$', '`$').replace('"', '`"')
+                xml_body = html.escape(clean_msg[:120]).replace('`', '``').replace('$', '`$').replace('"', '`"')
                 ps = (
-                    f'[reflection.assembly]::loadwithpartialname("System.Windows.Forms");'
-                    f'$n = new-object system.windows.forms.notifyicon;'
-                    f'$n.icon = [system.drawing.systemicons]::Information;'
-                    f'$n.visible = $true;'
-                    f'$n.showballoontip(5, "{clean_title}", "{clean_msg_win}", [system.windows.forms.tooltipicon]::Info);'
+                    '$ErrorActionPreference = "SilentlyContinue"; '
+                    'try { '
+                    '[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null; '
+                    '[Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] | Out-Null; '
+                    '$template = @"' + "\n"
+                    '<toast>' + "\n"
+                    '  <visual>' + "\n"
+                    '    <binding template="ToastGeneric">' + "\n"
+                    f'      <text>{xml_title}</text>' + "\n"
+                    f'      <text>{xml_body}</text>' + "\n"
+                    '    </binding>' + "\n"
+                    '  </visual>' + "\n"
+                    '</toast>' + "\n"
+                    '"@; '
+                    '$xml = New-Object Windows.Data.Xml.Dom.XmlDocument; '
+                    '$xml.LoadXml($template); '
+                    '$toast = [Windows.UI.Notifications.ToastNotification]::new($xml); '
+                    '$appId = "{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\\WindowsPowerShell\\v1.0\\powershell.exe"; '
+                    '[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier($appId).Show($toast); '
+                    '} catch { '
+                    '[reflection.assembly]::loadwithpartialname("System.Windows.Forms") | Out-Null; '
+                    '$n = new-object system.windows.forms.notifyicon; '
+                    '$n.icon = [system.drawing.systemicons]::Information; '
+                    '$n.visible = $true; '
+                    f'$n.showballoontip(4000, "{xml_title[:64]}", "{xml_body[:100]}", [system.windows.forms.tooltipicon]::Info); '
+                    'Start-Sleep -Seconds 3; '
+                    '$n.dispose(); '
+                    '}'
                 )
-                subprocess.run(["powershell", "-NoProfile", "-Command", ps], check=False, timeout=3)
+                subprocess.run(["powershell", "-NoProfile", "-Command", ps], check=False, timeout=6)
         except Exception:
             pass
 
