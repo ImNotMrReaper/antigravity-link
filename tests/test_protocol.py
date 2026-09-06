@@ -194,9 +194,11 @@ class TestProtocolAndHMAC(unittest.TestCase):
 
         with tempfile.NamedTemporaryFile("w+", delete=False) as tf:
             temp_path = tf.name
+        with tempfile.NamedTemporaryFile("w+", delete=False) as tf_inbox:
+            temp_inbox_path = tf_inbox.name
 
         try:
-            with patch("agy_link.PEER_STATE_FILE", temp_path):
+            with patch("agy_link.PEER_STATE_FILE", temp_path), patch("agy_link.INBOX_FILE", temp_inbox_path):
                 # Node 1 sync
                 pkt1 = {
                     "sender": {"node_id": "node-alpha", "user": "Alice", "role": "lead"},
@@ -224,6 +226,8 @@ class TestProtocolAndHMAC(unittest.TestCase):
         finally:
             if os.path.exists(temp_path):
                 os.remove(temp_path)
+            if os.path.exists(temp_inbox_path):
+                os.remove(temp_inbox_path)
 
     def test_token_verification_accepts_valid_token(self):
         pkt = {
