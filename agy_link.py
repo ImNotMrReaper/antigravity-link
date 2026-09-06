@@ -45,6 +45,8 @@ DEFAULT_PORT = 7890
 DEFAULT_ROOM = "agy_link_mrreaper_senpai_8829"
 DEFAULT_SECRET = "agy_secret_8829_tandem_key"
 RELAY_HOST = "https://ntfy.sh"
+VALID_ROLES = ["lead", "platform_lead", "contributor", "tester", "linux-lead", "windows-lead"]
+SECURITY_MODES = ["prompt", "session_trusted", "autonomous", "deny"]
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 AGY_DIR = os.path.join(SCRIPT_DIR, ".agy_link")
@@ -1155,7 +1157,7 @@ def cmd_join(args, config):
 
 def cmd_role(args, config):
     """Set local role in project collaboration hierarchy."""
-    valid_roles = ["lead", "platform_lead", "contributor", "tester", "linux-lead", "windows-lead"]
+    valid_roles = VALID_ROLES
     role_arg = getattr(args, "role_name", None)
     if not role_arg:
         print(f"Current Role: {config.get('role', 'contributor')}")
