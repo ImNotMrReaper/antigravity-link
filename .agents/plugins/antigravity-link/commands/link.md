@@ -40,3 +40,15 @@ Parse the user's arguments following `/link`:
 7. **`/link sync --task "<Task>" [--files "<Files>"]`**:
    - Broadcast task progress and lock files using `link_sync` or `python3 agy_link.py sync`.
    - Confirm lock status in chat.
+
+8. **`/link pair`**:
+   - Generate and display room pairing credentials and passkey via `python3 agy_link.py pair`.
+
+9. **`/link join --room <ROOM_ID> --key <SECRET_KEY>`**:
+   - Connect to a peer session room and test handshake via `python3 agy_link.py join`.
+
+10. **`/link role [lead|platform_lead|contributor|tester]`**:
+    - Inspect or set local hierarchy role via `python3 agy_link.py role`.
+
+11. **`/link security [prompt|session_trusted|autonomous|deny]`**:
+    - Inspect or configure the Human-in-the-Loop (HITL) security approval gate via `python3 agy_link.py security`.

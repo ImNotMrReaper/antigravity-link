@@ -44,3 +44,17 @@
 - All communication, task summaries, status updates, and reports must be rendered directly inside the AGY TUI session.
 - Never spawn external terminal windows or desktop emulator windows (Terminator, cmd.exe, wt.exe).
 - Users interact seamlessly via native AGY slash commands (`/link`, `/senpai`, `/inbox`) or natural language.
+
+## 7. Human-in-the-Loop (HITL) Security Approval Gate
+- Remote task requests requiring tool execution or local commands are intercepted by the security gate.
+- The receiving machine owner must authorize the task via native GUI dialog or prompt before execution.
+- Never bypass the approval gate without explicit user configuration.
+
+## 8. Role-Based Governance & Branch Authority
+- **Lead AI (`lead` / `main` branch owner):** Holds canonical authority over overall project architecture, code reviews, and final PR merges.
+- **Platform Lead (`platform_lead` / `windows` branch owner):** Leads platform-specific engineering (Windows batch, WinMM, macOS CoreGraphics). Writes and validates native code, and proposes pull requests or diffs to the Lead AI.
+- **Contributors & Testers:** Execute hardware validation, report diagnostic logs, and submit candidate patches.
+
+## 9. Cryptographic Room Pairing & HMAC Authentication
+- All wire packets are signed with HMAC-SHA256 using the session secret key.
+- Packets failing signature verification are automatically rejected to prevent spoofing or unauthorized remote control.

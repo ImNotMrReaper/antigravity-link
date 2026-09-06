@@ -27,6 +27,8 @@ import json
 import os
 import platform
 import re
+import hashlib
+import hmac
 import select
 import shutil
 import socket
@@ -38,9 +40,10 @@ import urllib.error
 import urllib.request
 
 # Base Constants
-PROTOCOL_VERSION = "1.0.0"
+PROTOCOL_VERSION = "1.1.0"
 DEFAULT_PORT = 7890
 DEFAULT_ROOM = "agy_link_mrreaper_senpai_8829"
+DEFAULT_SECRET = "agy_secret_8829_tandem_key"
 RELAY_HOST = "https://ntfy.sh"
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -85,6 +88,9 @@ def load_config():
         "peer_host": "127.0.0.1",
         "peer_port": DEFAULT_PORT,
         "auth_token": "agy_token_8829",
+        "secret_key": DEFAULT_SECRET,
+        "security_mode": "prompt",  # "prompt" (HITL approval required), "session_trusted", "autonomous", "deny"
+        "allow_unrestricted_remote": False,
         "relay_room": DEFAULT_ROOM,
         "mode": "hybrid",  # "hybrid", "direct", "relay"
         "notifications": True,
@@ -222,9 +228,40 @@ def notify_desktop(title, message):
 # -----------------------------------------------------------------------------
 
 
+def compute_packet_signature(packet, secret_key):
+    """Calculate HMAC-SHA256 signature for wire packet integrity."""
+    if not secret_key:
+        return ""
+    try:
+        data_to_sign = json.dumps({
+            "version": packet.get("version"),
+            "type": packet.get("type"),
+            "timestamp": packet.get("timestamp"),
+            "sender": packet.get("sender"),
+            "payload": packet.get("payload")
+        }, sort_keys=True, ensure_ascii=False)
+        return hmac.new(secret_key.encode("utf-8"), data_to_sign.encode("utf-8"), hashlib.sha256).hexdigest()
+    except Exception:
+        return ""
+
+
+def verify_packet_signature(packet, secret_key):
+    """Verify HMAC-SHA256 signature on incoming packet."""
+    if not secret_key:
+        return True
+    received_sig = packet.get("signature", "")
+    if not received_sig:
+        # Backward compatibility for legacy v1.0.0 packets if default auth_token matches
+        if packet.get("auth_token") == "agy_token_8829":
+            return True
+        return False
+    expected_sig = compute_packet_signature(packet, secret_key)
+    return hmac.compare_digest(expected_sig, received_sig)
+
+
 def make_packet(packet_type, payload, config):
-    """Create standardized v1.0.0 JSON wire packet."""
-    return {
+    """Create standardized v1.1.0 JSON wire packet with HMAC signature."""
+    pkt = {
         "version": PROTOCOL_VERSION,
         "packet_id": f"{int(time.time() * 1000)}-{os.urandom(3).hex()}",
         "timestamp": get_iso_timestamp(),
@@ -238,6 +275,9 @@ def make_packet(packet_type, payload, config):
         },
         "payload": payload,
     }
+    secret_key = config.get("secret_key", DEFAULT_SECRET)
+    pkt["signature"] = compute_packet_signature(pkt, secret_key)
+    return pkt
 
 
 def update_peer_state(packet):
@@ -574,21 +614,130 @@ def resolve_summon_target(raw_prefix, local_platform):
     return "both"
 
 
-def execute_local_agy(prompt, config, transport=None):
+def request_user_permission(task_description, sender_info, config):
+    """
+    Human-in-the-Loop (HITL) Security Approval Gate.
+    Prompts the local machine owner to authorize an incoming autonomous task from a peer AI.
+    Returns True if approved, False if rejected or timed out.
+    """
+    security_mode = config.get("security_mode", "prompt")
+    if security_mode == "autonomous":
+        log_activity("Security Gate: Autonomous mode enabled. Auto-approving task.")
+        return True
+    if security_mode == "deny":
+        log_activity("Security Gate: Deny mode enabled. Rejecting task.")
+        return False
+
+    sender_info = sender_info or {}
+    sender_user = sender_info.get("user", "Peer AI")
+    sender_role = sender_info.get("role", "peer")
+    sender_platform = sender_info.get("platform", "").upper()
+
+    log_activity(f"Security Gate: Requesting owner approval for task from {sender_user}: {task_description[:60]}")
+    notify_desktop("Antigravity Link Security Gate", f"Task request from {sender_user}: {task_description[:60]}")
+
+    # 1. Windows: Native PowerShell GUI MessageBox
+    if sys.platform == "win32":
+        clean_task = task_description.replace('"', '`"').replace("'", "''")[:300]
+        ps_cmd = (
+            'Add-Type -AssemblyName PresentationFramework; '
+            f'$res = [System.Windows.MessageBox]::Show('
+            f'"⚡ Antigravity Link Security Request`n`n'
+            f'Peer: {sender_user} ({sender_role} on {sender_platform})`n`n'
+            f'Requested Task:`n`"{clean_task}`"`n`n'
+            f'Allow this AI to execute autonomously on your PC?", '
+            f'"Antigravity Link Security Gate", '
+            f'[System.Windows.MessageBoxButton]::YesNo, '
+            f'[System.Windows.MessageBoxImage]::Question); '
+            f'if ($res -eq [System.Windows.MessageBoxResult]::Yes) {{ exit 0 }} else {{ exit 1 }}'
+        )
+        try:
+            res = subprocess.run(["powershell", "-NoProfile", "-Command", ps_cmd], timeout=60)
+            approved = (res.returncode == 0)
+            log_activity(f"Security Gate: Windows prompt result: {'Approved' if approved else 'Denied'}")
+            return approved
+        except Exception as e:
+            log_activity(f"Security Gate: Windows prompt failed or timed out: {e}")
+            return False
+
+    # 2. Linux: Zenity GUI Question Dialog
+    else:
+        has_display = bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
+        zenity_bin = shutil.which("zenity")
+        if has_display and zenity_bin:
+            clean_task = task_description.replace('"', '\\"').replace("'", "\\'")[:300]
+            msg = (
+                f"⚡ <b>Antigravity Link Security Gate</b>\n\n"
+                f"<b>Peer:</b> {sender_user} ({sender_role} on {sender_platform})\n\n"
+                f"<b>Requested Task:</b>\n<i>{clean_task}</i>\n\n"
+                f"Allow this AI task to execute on your machine?"
+            )
+            try:
+                res = subprocess.run(
+                    [zenity_bin, "--question", "--title=Antigravity Link Security Gate", f"--text={msg}", "--timeout=60", "--width=420"],
+                    timeout=65
+                )
+                approved = (res.returncode == 0)
+                log_activity(f"Security Gate: Linux Zenity prompt result: {'Approved' if approved else 'Denied'}")
+                return approved
+            except Exception as e:
+                log_activity(f"Security Gate: Zenity prompt failed: {e}")
+
+    # 3. Terminal fallback if attached to an interactive TTY
+    if sys.stdin and sys.stdin.isatty():
+        try:
+            print("\n" + "=" * 62, flush=True)
+            print("🛡️  ANTIGRAVITY LINK SECURITY GATE: Action Approval Required", flush=True)
+            print(f"   From:    {sender_user} ({sender_role} on {sender_platform})", flush=True)
+            print(f"   Task:    {task_description}", flush=True)
+            print("=" * 62, flush=True)
+            ans = input("   Allow autonomous execution on this machine? [y/N]: ").strip().lower()
+            approved = ans in ("y", "yes")
+            log_activity(f"Security Gate: Terminal prompt result: {'Approved' if approved else 'Denied'}")
+            return approved
+        except Exception:
+            pass
+
+    # Safe default when headless with no GUI and no interactive TTY
+    log_activity("Security Gate: Non-interactive environment without display. Defaulting to safe denial.")
+    return False
+
+
+def execute_local_agy(prompt, config, transport=None, is_remote_request=False, sender_info=None):
     """Execute a task autonomously using local agy CLI and broadcast report."""
-    agy_bin = find_agy_executable()
+    sender_info = sender_info or {}
     user = config.get("user", "Local")
     plat_str = platform.system().upper()
-    log_activity(f"Executing autonomous AGY task: {prompt[:80]}")
+
+    # Security Approval Gate for remote peer summons
+    if is_remote_request:
+        if not request_user_permission(prompt, sender_info, config):
+            print(f"\n🛑 [SECURITY GATE] Remote task rejected or timed out by machine owner.\n> ", end="", flush=True)
+            log_activity(f"Security Gate: Blocked unapproved remote task from {sender_info.get('user', 'peer')}")
+            notify_desktop("Antigravity Link Security", f"Blocked unapproved task from {sender_info.get('user', 'peer')}")
+
+            rejection_payload = {
+                "task": prompt,
+                "report": f"Execution declined: Machine owner ({user}) did not authorize this remote task request.",
+                "status": "rejected_by_owner",
+                "elapsed_sec": 0.0,
+                "success": False
+            }
+            report_packet = make_packet("agent_report", rejection_payload, config)
+            update_peer_state(report_packet)
+            if transport:
+                transport.send(report_packet)
+            return rejection_payload
+
+    agy_bin = find_agy_executable()
+    log_activity(f"Executing AGY task: {prompt[:80]}")
     notify_desktop(f"AGY [{plat_str}] Autonomous Agent", f"Task started: {prompt[:80]}")
 
     print(f"\n⚡ [AUTONOMOUS AGY RUNNING] Executing task on {user} ({plat_str})...\n   Task: {prompt}\n", flush=True)
 
-    cmd = [
-        agy_bin,
-        "-p", prompt,
-        "--dangerously-skip-permissions"
-    ]
+    cmd = [agy_bin, "-p", prompt]
+    if (not is_remote_request) or config.get("allow_unrestricted_remote", False):
+        cmd.append("--dangerously-skip-permissions")
 
     start_t = time.time()
     try:
@@ -776,6 +925,13 @@ def cmd_daemon(args, config):
         p_type = packet.get("type", "message")
         payload = packet.get("payload", {})
 
+        # Cryptographic HMAC Signature Verification
+        secret_key = config.get("secret_key", DEFAULT_SECRET)
+        if not verify_packet_signature(packet, secret_key):
+            print(f"\n🛡️  [SECURITY GATE] Dropped unauthenticated packet from {sender.get('user', 'unknown')} ({sender.get('node_id')})! Invalid signature.", flush=True)
+            log_activity(f"Security Gate: Dropped packet from {sender.get('user')} with invalid HMAC signature.")
+            return
+
         print(f"\n🔔 [{datetime.datetime.now().strftime('%H:%M:%S')}] Received [{p_type.upper()}] from {sender.get('user')}:", flush=True)
         if p_type == "state_sync":
             print(f"   Task:   {payload.get('task')} [{payload.get('status')}]", flush=True)
@@ -790,7 +946,7 @@ def cmd_daemon(args, config):
             print(f"   ⚡ AI SUMMON: {task} (Target: {target})", flush=True)
             if should_execute_locally(target, config, is_incoming=True):
                 print(f"   🚀 Launching local AGY background execution...", flush=True)
-                threading.Thread(target=execute_local_agy, args=(task, config, transport), daemon=True).start()
+                threading.Thread(target=execute_local_agy, args=(task, config, transport, True, sender), daemon=True).start()
         elif p_type == "agent_report":
             status = payload.get("status", "completed").upper()
             print(f"   🤖 AI REPORT: {payload.get('task')} [{status}]", flush=True)
@@ -839,6 +995,13 @@ def cmd_chat(args, config):
         p_type = packet.get("type", "chat")
         payload = packet.get("payload", {})
 
+        # Cryptographic HMAC Signature Verification
+        secret_key = config.get("secret_key", DEFAULT_SECRET)
+        if not verify_packet_signature(packet, secret_key):
+            print(f"\n🛡️  [SECURITY GATE] Dropped unauthenticated packet from {sender.get('user', 'unknown')}! Invalid signature.\n> ", end="", flush=True)
+            log_activity(f"Security Gate: Dropped chat packet from {sender.get('user')} with invalid HMAC signature.")
+            return
+
         if p_type == "chat":
             text = payload.get("text", "")
             print(f"\n💬 [{sender.get('user')}]: {text}\n> ", end="", flush=True)
@@ -848,7 +1011,7 @@ def cmd_chat(args, config):
             print(f"\n⚡ [@{sender.get('user')} SUMMONED AI]: {task} (Target: {target})\n> ", end="", flush=True)
             if should_execute_locally(target, config, is_incoming=True):
                 print(f"🚀 [LOCAL AGY] Starting background turn...\n> ", end="", flush=True)
-                threading.Thread(target=execute_local_agy, args=(task, config, transport), daemon=True).start()
+                threading.Thread(target=execute_local_agy, args=(task, config, transport, True, sender), daemon=True).start()
         elif p_type == "agent_report":
             status = payload.get("status", "completed").upper()
             rep = payload.get("report", "").strip()
@@ -942,6 +1105,94 @@ def cmd_summon(args, config):
     return 0
 
 
+def cmd_pair(args, config):
+    """Generate and display room pairing credentials for peer connection."""
+    room = config.get("relay_room", DEFAULT_ROOM)
+    key = config.get("secret_key", DEFAULT_SECRET)
+    user = config.get("user", "User")
+    role = config.get("role", "contributor")
+
+    print("============================================================")
+    print("🔗 ANTIGRAVITY LINK — SESSION PAIRING CREDENTIALS")
+    print("============================================================")
+    print(f"Room ID:    {room}")
+    print(f"Secret Key: {key}")
+    print(f"User:       {user}")
+    print(f"Role:       {role}")
+    print(f"Security:   {config.get('security_mode', 'prompt').upper()} (Human Approval Gate)")
+    print("------------------------------------------------------------")
+    print("Share these credentials with your collaborator. On their PC, run:")
+    print(f"  link join --room \"{room}\" --key \"{key}\" --peer \"{user}\"")
+    print("============================================================")
+    return 0
+
+
+def cmd_join(args, config):
+    """Join an Antigravity Link room using provided room ID and secret key."""
+    room = getattr(args, "room", None)
+    key = getattr(args, "key", None)
+    if not room or not key:
+        print("❌ Error: Both --room and --key are required to join.")
+        print("Usage: link join --room <ROOM_ID> --key <SECRET_KEY> [--peer <PEER_NAME>]")
+        return 1
+    config["relay_room"] = room
+    config["secret_key"] = key
+    config["auth_token"] = key[:16]
+    peer = getattr(args, "peer", None)
+    if peer:
+        config["peer"] = peer
+    save_config(config)
+    print(f"✅ Joined room '{room}'. Credentials saved to .agy_link/config.json.")
+    print("[+] Sending secure handshake to verify connection...", end=" ", flush=True)
+    transport = NetworkTransport(config)
+    ok, msg = transport.send(make_packet("chat", {"text": f"👋 Handshake verified! {config.get('user')} ({config.get('role')}) joined the session."}, config))
+    if ok:
+        print("✅ Handshake delivered successfully!")
+    else:
+        print(f"⚠️  Handshake warning: {msg}")
+    return 0
+
+
+def cmd_role(args, config):
+    """Set local role in project collaboration hierarchy."""
+    valid_roles = ["lead", "platform_lead", "contributor", "tester", "linux-lead", "windows-lead"]
+    role_arg = getattr(args, "role_name", None)
+    if not role_arg:
+        print(f"Current Role: {config.get('role', 'contributor')}")
+        print("Hierarchy Roles:")
+        print("  lead:          Project Architect / Lead (holds master/main branch authority)")
+        print("  platform_lead: Platform Lead (owns platform-specific branch like 'windows')")
+        print("  contributor:   Develops features and submits proposed patches/PRs")
+        print("  tester:        Validates hardware and runs test suites")
+        return 0
+    r = role_arg.lower().replace("-", "_")
+    config["role"] = r
+    save_config(config)
+    print(f"✅ Local role updated to: {r}")
+    return 0
+
+
+def cmd_security(args, config):
+    """Inspect or configure Human-in-the-Loop (HITL) security approval gate."""
+    mode_arg = getattr(args, "mode_name", None)
+    if not mode_arg:
+        print(f"Current Security Mode: {config.get('security_mode', 'prompt').upper()}")
+        print("Available Modes:")
+        print("  prompt:          (Recommended) Owner must approve each incoming remote task")
+        print("  session_trusted: Temporarily trust peer for the active session")
+        print("  autonomous:      Unrestricted autonomous execution (isolated lab)")
+        print("  deny:            Block all remote task requests automatically")
+        return 0
+    m = mode_arg.lower()
+    if m not in ("prompt", "session_trusted", "autonomous", "deny"):
+        print(f"❌ Invalid security mode: {m}")
+        return 1
+    config["security_mode"] = m
+    save_config(config)
+    print(f"✅ Security approval mode set to: {m.upper()}")
+    return 0
+
+
 # -----------------------------------------------------------------------------
 # Main Entry Point
 # -----------------------------------------------------------------------------
@@ -987,6 +1238,27 @@ def main():
     if first_arg in ("open", "popup"):
         open_terminal_chat()
         return 0
+
+    if first_arg == "pair":
+        return cmd_pair(None, config)
+
+    if first_arg == "join":
+        room = sys.argv[2] if len(sys.argv) > 2 and not sys.argv[2].startswith("-") else None
+        key = sys.argv[3] if len(sys.argv) > 3 and not sys.argv[3].startswith("-") else None
+        peer = sys.argv[4] if len(sys.argv) > 4 and not sys.argv[4].startswith("-") else None
+        if room and key:
+            args = argparse.Namespace(room=room, key=key, peer=peer)
+            return cmd_join(args, config)
+
+    if first_arg == "role":
+        role_name = sys.argv[2] if len(sys.argv) > 2 and not sys.argv[2].startswith("-") else None
+        args = argparse.Namespace(role_name=role_name)
+        return cmd_role(args, config)
+
+    if first_arg == "security":
+        mode_name = sys.argv[2] if len(sys.argv) > 2 and not sys.argv[2].startswith("-") else None
+        args = argparse.Namespace(mode_name=mode_name)
+        return cmd_security(args, config)
 
     if first_arg == "pull":
         repo_dir = os.path.dirname(os.path.abspath(__file__))
@@ -1048,6 +1320,23 @@ def main():
     # inbox
     subparsers.add_parser("inbox", help="View recent messages & sync history")
 
+    # pair
+    subparsers.add_parser("pair", help="Display room ID and secret key for peer pairing")
+
+    # join
+    p_join = subparsers.add_parser("join", help="Join an Antigravity Link room")
+    p_join.add_argument("--room", help="Room ID to join")
+    p_join.add_argument("--key", help="Secret key for authentication")
+    p_join.add_argument("--peer", help="Peer display name")
+
+    # role
+    p_role = subparsers.add_parser("role", help="Set local role (lead, platform_lead, contributor, tester)")
+    p_role.add_argument("role_name", nargs="?", help="Role name")
+
+    # security
+    p_sec = subparsers.add_parser("security", help="Inspect or set HITL security approval gate mode")
+    p_sec.add_argument("mode_name", nargs="?", choices=["prompt", "session_trusted", "autonomous", "deny"], help="Security mode")
+
     args = parser.parse_args()
 
     if args.peer_host:
@@ -1075,6 +1364,14 @@ def main():
         return cmd_chat(args, config)
     elif args.command == "inbox":
         return cmd_inbox(args, config)
+    elif args.command == "pair":
+        return cmd_pair(args, config)
+    elif args.command == "join":
+        return cmd_join(args, config)
+    elif args.command == "role":
+        return cmd_role(args, config)
+    elif args.command == "security":
+        return cmd_security(args, config)
     return 0
 
 

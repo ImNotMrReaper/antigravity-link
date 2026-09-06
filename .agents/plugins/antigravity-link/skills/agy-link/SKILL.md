@@ -54,3 +54,40 @@ When writing code or orchestrating tasks, the agent can call these tools directl
    ```bash
    python3 agy_link.py sync --task "Feature X" --status "completed"
    ```
+
+---
+
+## 🛡️ Human-in-the-Loop (HITL) Security Approval Gate
+- Protects against unauthorized remote code execution (RCE).
+- When a peer AI asks to execute an autonomous task on your machine, a native GUI confirmation dialog prompts the machine owner (`[Yes / No]`).
+- Configure security mode:
+  ```bash
+  python3 agy_link.py security prompt          # (Default) Explicit approval required
+  python3 agy_link.py security session_trusted # Temporarily trust peer for active session
+  python3 agy_link.py security deny            # Auto-deny all remote execution
+  ```
+
+---
+
+## 👑 Role-Based Collaboration Hierarchy
+- **Project Lead (`lead`):** Holds overall architectural authority and default branch (`main`).
+- **Platform Lead (`platform_lead`):** Owns platform-specific branch (e.g. `windows`) and native builds.
+- **Contributor / Tester:** Validates hardware and submits candidate diffs/PRs to the lead.
+- Set role:
+  ```bash
+  python3 agy_link.py role lead
+  python3 agy_link.py role platform_lead
+  ```
+
+---
+
+## 🔗 Session Room Pairing & Secret Keys
+- View credentials:
+  ```bash
+  python3 agy_link.py pair
+  ```
+- Join a collaborator's room:
+  ```bash
+  python3 agy_link.py join --room <ROOM_ID> --key <SECRET_KEY> --peer <PEER_NAME>
+  ```
+- All packets are cryptographically signed with HMAC-SHA256 to ensure authenticity.

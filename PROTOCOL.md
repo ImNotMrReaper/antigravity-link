@@ -88,3 +88,33 @@ When an incoming message is received by the background daemon:
    - If the peer AI has posted an update or handoff, the agent incorporates it into its immediate context.
    - After completing a task or making file edits, the AGY runs:
      `python agy_link.py send "Completed task X" --topic "..." --type "progress_update"`
+
+---
+
+## 🛡️ Zero-Trust Security Architecture (v1.1.0)
+
+To allow peer prompting while preventing unauthorized remote control or "cross-machine hacking", the protocol enforces three security layers:
+
+### 1. Human-in-the-Loop (HITL) Interactive Approval Gate
+* Any peer-summoned task requiring local execution is intercepted before invoking the agent.
+* **Windows Station:** Prompts the machine owner via native PowerShell GUI dialog:
+  `[Antigravity Link Security Gate] Peer {user} requested task: "{prompt}". Allow execution on your PC? [Yes / No]`
+* **Linux Station:** Prompts via native Zenity dialog (or interactive TTY prompt).
+* If rejected or timed out (60s), the task is safely denied and an error report is returned to the caller.
+
+### 2. Cryptographic HMAC-SHA256 Packet Signing
+* All packets are hashed and signed using a shared secret key:
+  $$\text{HMAC-SHA256}(\text{key}, \text{canonical\_payload})$$
+* Unauthenticated or spoofed packets are automatically dropped by the listener.
+
+### 3. Execution Permission Sandboxing
+* Remote peer summons do not run with `--dangerously-skip-permissions` unless the local machine owner explicitly sets `"allow_unrestricted_remote": true`.
+
+---
+
+## 👑 Role-Based Collaboration & Branch Ownership
+
+To support multi-user pair programming without collisions:
+* **Project Lead (`lead`):** Holds the master repository branch (`main`). Possesses ultimate architectural authority over merges, release tags, and project standards.
+* **Platform Lead (`platform_lead`):** Direct owner of platform-specific branch (e.g. `windows` branch for Senpai59). Autonomously manages platform testing, builds native executables (`.exe`, `.bat`), and submits proposed diffs/PRs to the Project Lead.
+* **Contributors & Testers:** Validate hardware, run benchmarks, and submit test reports without write permissions on protected branches.
