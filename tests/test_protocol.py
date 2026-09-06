@@ -139,6 +139,32 @@ class TestProtocolAndHMAC(unittest.TestCase):
             is_suspicious, trigger = scan_for_prompt_injection(prompt)
             self.assertFalse(is_suspicious, f"Benign prompt flagged as suspicious: '{prompt}'")
 
+    def test_token_verification_accepts_valid_token(self):
+        pkt = {
+            "version": PROTOCOL_VERSION,
+            "type": "chat",
+            "auth_token": "my_secret_token_123",
+            "payload": {"text": "hello"}
+        }
+        self.assertTrue(verify_packet_signature(pkt, secret_key="", expected_token="my_secret_token_123"))
+
+    def test_token_verification_rejects_invalid_token(self):
+        pkt = {
+            "version": PROTOCOL_VERSION,
+            "type": "chat",
+            "auth_token": "wrong_token",
+            "payload": {"text": "hello"}
+        }
+        self.assertFalse(verify_packet_signature(pkt, secret_key="", expected_token="my_secret_token_123"))
+
+    def test_unsigned_packet_without_token_rejected(self):
+        pkt = {
+            "version": PROTOCOL_VERSION,
+            "type": "chat",
+            "payload": {"text": "hello"}
+        }
+        self.assertFalse(verify_packet_signature(pkt, secret_key="configured_key", expected_token="configured_token"))
+
 
 if __name__ == "__main__":
     unittest.main()

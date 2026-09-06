@@ -32,13 +32,21 @@ case "$1" in
         shift
         exec python3 "$REPO_DIR/agy_link.py" summon "$*" --target both
         ;;
-    peer|senpai|remote)
+    peer|remote)
+        shift
+        exec python3 "$REPO_DIR/agy_link.py" summon "$*" --target peer
+        ;;
+    senpai)
         shift
         exec python3 "$REPO_DIR/agy_link.py" summon "$*" --target senpai
         ;;
     reaper|local)
         shift
         exec python3 "$REPO_DIR/agy_link.py" summon "$*" --target reaper
+        ;;
+    gui|web|dashboard)
+        shift
+        exec python3 "$REPO_DIR/agy_link.py" gui "$@"
         ;;
     pull)
         cd "$REPO_DIR" && git pull origin main

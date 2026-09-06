@@ -26,12 +26,12 @@ We are splitting the engineering work evenly:
 ---
 
 ## 📡 The Transport Protocol (Already Established)
-* **Zero-Port-Forwarding Cloud Relay:** Uses encrypted HTTPS streaming via `https://ntfy.sh` with shared secret room `agy_link_mrreaper_senpai_8829`.
+* **Zero-Port-Forwarding Cloud Relay:** Uses encrypted HTTPS streaming via `https://ntfy.sh` with shared secret room `<your_paired_room_id>`.
 * **Directional Channels:**
-  - Senpai AGY listens to: `agy_link_mrreaper_senpai_8829_mr-reaper_to_senpai`
-  - Senpai AGY publishes to: `agy_link_mrreaper_senpai_8829_senpai_to_mr-reaper`
+  - Contributor AGY listens to: `<room_id>_lead_to_contributor`
+  - Contributor AGY publishes to: `<room_id>_contributor_to_lead`
 * **Local State Files:**
-  - `INBOX.md`: Formatted Markdown log of all incoming messages from Mr-Reaper's AGY.
+  - `INBOX.md`: Formatted Markdown log of all incoming messages from Peer AGY.
   - `LATEST.json`: Raw JSON of the latest incoming message.
 
 ---

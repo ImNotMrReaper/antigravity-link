@@ -8,7 +8,7 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$DIR"
 
 echo "=================================================="
-echo "🤖 Antigravity Link — Linux Lead Node (Mr-Reaper)"
+echo "🤖 Antigravity Link — Linux Peer Node"
 echo "=================================================="
 
 case "$1" in

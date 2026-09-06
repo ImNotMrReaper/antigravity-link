@@ -1,14 +1,14 @@
 @echo off
 chcp 65001 >nul
-title Antigravity Link - Windows Lead Node (Senpai59)
+title Antigravity Link - Windows Peer Node
 cd /d "%~dp0"
 
 :MENU
 cls
 echo ============================================================
-echo   🤖 ANTIGRAVITY LINK — Windows Lead Node (Senpai59)
+echo   🤖 ANTIGRAVITY LINK — Windows Peer Node
 echo ============================================================
-echo   [1] Start Live Terminal Chat with Mr-Reaper
+echo   [1] Start Live Terminal Chat with Peer AI
 echo   [2] Run Sync Daemon (Foreground Console)
 echo   [3] Start Sync Daemon (Silent Background)
 echo   [4] Stop Background Daemon
@@ -18,9 +18,10 @@ echo   [7] Broadcast State Sync
 echo   [8] Summon AI Agent (@ai / @both / @senpai / @reaper)
 echo   [9] Install 'link' Command, Shortcuts & AGY Plugin
 echo   [10] Install Auto-Start on Windows Login
-echo   [11] Exit
+echo   [11] Start Embedded PyCharm Web GUI (http://127.0.0.1:7891)
+echo   [12] Exit
 echo ============================================================
-set /p choice="Select an option (1-11): "
+set /p choice="Select an option (1-12): "
 
 if "%choice%"=="1" (
     cls
@@ -94,6 +95,13 @@ if "%choice%"=="10" (
     pause
     goto MENU
 )
-if "%choice%"=="11" exit /b 0
+if "%choice%"=="11" (
+    cls
+    echo Starting PyCharm Embedded Web GUI on http://127.0.0.1:7891...
+    python agy_link.py gui --port 7891
+    pause
+    goto MENU
+)
+if "%choice%"=="12" exit /b 0
 
 goto MENU

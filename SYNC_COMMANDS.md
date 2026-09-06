@@ -16,9 +16,9 @@ Run these from **ANY** terminal window without changing directories:
 | Action | Quick Command (No Quotes Needed!) | What it Does |
 | :--- | :--- | :--- |
 | **Open Chat** | `link` or `link chat` | Launches two-way terminal chat with zero setup |
-| **Summon Both AIs** | `link ai <task>` | Dispatches task to **both** Linux & Windows AIs in parallel |
-| **Summon Senpai's AI** | `link senpai <task>` | Hands off task to Senpai's Windows 11 AI exclusively |
-| **Summon Reaper's AI** | `link reaper <task>` | Executes task on Reaper's local Linux AI exclusively |
+| **Summon Both AIs** | `link ai <task>` | Dispatches task to **both** peer AIs in parallel |
+| **Summon Peer AI** | `link peer <task>` | Hands off task to remote peer AI exclusively (`link senpai` alias) |
+| **Execute Local AI** | `link local <task>` | Executes task on local AI exclusively (`link reaper` alias) |
 | **Send Message** | `link send <message>` | Sends direct chat alert to peer |
 | **Check Peer Status** | `link status` | Displays live network state and active locks |
 | **View Peer Inbox** | `link inbox` | Displays latest peer messages and AI reports |

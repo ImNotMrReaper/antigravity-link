@@ -43,8 +43,10 @@ import urllib.request
 # Base Constants
 PROTOCOL_VERSION = "1.1.0"
 DEFAULT_PORT = 7890
-DEFAULT_ROOM = "agy_link_mrreaper_senpai_8829"
-DEFAULT_SECRET = "agy_secret_8829_tandem_key"
+# Environment overrides or generic default room/secret for open source privacy
+DEFAULT_ROOM = os.environ.get("AGY_LINK_ROOM", "agy_link_community_room")
+DEFAULT_SECRET = os.environ.get("AGY_LINK_SECRET", "agy_secret_key_change_me")
+DEFAULT_TOKEN = os.environ.get("AGY_LINK_TOKEN", "")
 RELAY_HOST = "https://ntfy.sh"
 VALID_ROLES = ["lead", "platform_lead", "contributor", "tester", "linux-lead", "windows-lead"]
 SECURITY_MODES = ["prompt", "session_trusted", "autonomous", "deny"]
@@ -83,14 +85,14 @@ def load_config():
     ensure_dirs()
     is_win = sys.platform == "win32"
     default_config = {
-        "node_id": "senpai-win" if is_win else "reaper-linux",
-        "user": "Senpai59" if is_win else "Mr-Reaper",
-        "role": "windows-lead" if is_win else "linux-lead",
+        "node_id": "peer-win" if is_win else "peer-linux",
+        "user": "Peer-Windows" if is_win else "Peer-Linux",
+        "role": "platform_lead" if is_win else "lead",
         "local_host": "0.0.0.0",
         "local_port": DEFAULT_PORT,
         "peer_host": "127.0.0.1",
         "peer_port": DEFAULT_PORT,
-        "auth_token": "agy_token_8829",
+        "auth_token": DEFAULT_TOKEN,
         "secret_key": DEFAULT_SECRET,
         "security_mode": "prompt",  # "prompt" (HITL approval required), "session_trusted", "autonomous", "deny"
         "allow_unrestricted_remote": False,
@@ -107,6 +109,11 @@ def load_config():
             pass
     else:
         save_config(default_config)
+
+    # Backwards compatibility fallback for paired session rooms
+    if ("8829" in str(default_config.get("relay_room", "")) or "mrreaper" in str(default_config.get("relay_room", ""))) and default_config.get("secret_key") == DEFAULT_SECRET:
+        default_config["secret_key"] = "agy_secret_8829_tandem_key"
+
     return default_config
 
 
@@ -342,32 +349,38 @@ def compute_packet_signature(packet, secret_key):
         return ""
 
 
-def verify_packet_signature(packet, secret_key):
-    """Verify HMAC-SHA256 signature on incoming packet with backward compatibility."""
-    if not secret_key:
+def verify_packet_signature(packet, secret_key, expected_token=""):
+    """Verify HMAC-SHA256 signature and/or auth token on incoming packet with backward compatibility."""
+    if not secret_key and not expected_token:
         return True
     received_sig = packet.get("signature", "")
-    if not received_sig:
-        if packet.get("auth_token") == "agy_token_8829":
+    received_token = packet.get("auth_token", "")
+
+    # 1. Primary: Verify cryptographic HMAC-SHA256 wire signature
+    if received_sig and secret_key:
+        expected_sig = compute_packet_signature(packet, secret_key)
+        if hmac.compare_digest(expected_sig, received_sig):
             return True
-        return False
-    expected_sig = compute_packet_signature(packet, secret_key)
-    if hmac.compare_digest(expected_sig, received_sig):
-        return True
-    # Backward compatibility fallback for legacy packets without salt/packet_id
-    try:
-        legacy_data = json.dumps({
-            "version": packet.get("version"),
-            "type": packet.get("type"),
-            "timestamp": packet.get("timestamp"),
-            "sender": packet.get("sender"),
-            "payload": packet.get("payload")
-        }, sort_keys=True, ensure_ascii=False)
-        legacy_sig = hmac.new(secret_key.encode("utf-8"), legacy_data.encode("utf-8"), hashlib.sha256).hexdigest()
-        if hmac.compare_digest(legacy_sig, received_sig):
+        # Backward compatibility fallback for legacy packets without salt/packet_id
+        try:
+            legacy_data = json.dumps({
+                "version": packet.get("version"),
+                "type": packet.get("type"),
+                "timestamp": packet.get("timestamp"),
+                "sender": packet.get("sender"),
+                "payload": packet.get("payload")
+            }, sort_keys=True, ensure_ascii=False)
+            legacy_sig = hmac.new(secret_key.encode("utf-8"), legacy_data.encode("utf-8"), hashlib.sha256).hexdigest()
+            if hmac.compare_digest(legacy_sig, received_sig):
+                return True
+        except Exception:
+            pass
+
+    # 2. Token-based fallback: must match configured auth token
+    if expected_token and received_token:
+        if hmac.compare_digest(str(expected_token), str(received_token)):
             return True
-    except Exception:
-        pass
+
     return False
 
 
@@ -474,12 +487,26 @@ class NetworkTransport:
         self.peer_port = int(config.get("peer_port", DEFAULT_PORT))
 
         # Cloud Relay topics
-        if "linux" in self.role:
-            self.sub_topic = f"{self.room}_senpai_to_mr-reaper"
-            self.pub_topic = f"{self.room}_mr-reaper_to_senpai"
+        is_lead = self.role in ("lead", "linux-lead") or (not sys.platform == "win32" and self.role != "platform_lead")
+        if self.config.get("sub_topic") and self.config.get("pub_topic"):
+            self.sub_topic = self.config["sub_topic"]
+            self.pub_topic = self.config["pub_topic"]
+        elif "mrreaper" in self.room or "senpai" in self.room:
+            # Backwards compatibility for existing Mr-Reaper & Senpai pair
+            if is_lead or "linux" in self.role:
+                self.sub_topic = f"{self.room}_senpai_to_mr-reaper"
+                self.pub_topic = f"{self.room}_mr-reaper_to_senpai"
+            else:
+                self.sub_topic = f"{self.room}_mr-reaper_to_senpai"
+                self.pub_topic = f"{self.room}_senpai_to_mr-reaper"
         else:
-            self.sub_topic = f"{self.room}_mr-reaper_to_senpai"
-            self.pub_topic = f"{self.room}_senpai_to_mr-reaper"
+            # Generalized directional channels for community teams
+            if is_lead:
+                self.sub_topic = f"{self.room}_contributor_to_lead"
+                self.pub_topic = f"{self.room}_lead_to_contributor"
+            else:
+                self.sub_topic = f"{self.room}_lead_to_contributor"
+                self.pub_topic = f"{self.room}_contributor_to_lead"
 
     def send_direct_tcp(self, packet):
         """Send packet via raw TCP socket."""
@@ -1043,9 +1070,10 @@ def cmd_daemon(args, config):
         p_type = packet.get("type", "message")
         payload = packet.get("payload", {})
 
-        # Cryptographic HMAC Signature Verification
+        # Cryptographic HMAC Signature & Token Verification
         secret_key = config.get("secret_key", DEFAULT_SECRET)
-        if not verify_packet_signature(packet, secret_key):
+        auth_token = config.get("auth_token", "")
+        if not verify_packet_signature(packet, secret_key, auth_token):
             print(f"\n🛡️  [SECURITY GATE] Dropped unauthenticated packet from {sender.get('user', 'unknown')} ({sender.get('node_id')})! Invalid signature.", flush=True)
             log_activity(f"Security Gate: Dropped packet from {sender.get('user')} with invalid HMAC signature.")
             return
@@ -1128,9 +1156,10 @@ def cmd_chat(args, config):
         p_type = packet.get("type", "chat")
         payload = packet.get("payload", {})
 
-        # Cryptographic HMAC Signature Verification
+        # Cryptographic HMAC Signature & Token Verification
         secret_key = config.get("secret_key", DEFAULT_SECRET)
-        if not verify_packet_signature(packet, secret_key):
+        auth_token = config.get("auth_token", "")
+        if not verify_packet_signature(packet, secret_key, auth_token):
             print(f"\n🛡️  [SECURITY GATE] Dropped unauthenticated packet from {sender.get('user', 'unknown')}! Invalid signature.\n> ", end="", flush=True)
             log_activity(f"Security Gate: Dropped chat packet from {sender.get('user')} with invalid HMAC signature.")
             return
@@ -1438,6 +1467,347 @@ def cmd_init(args, config):
     return 0
 
 
+def get_dashboard_status(config):
+    """Compile structured dictionary of local node and peer state for GUI dashboard."""
+    peer_data = {"name": "Peer", "role": "peer", "is_online": False, "is_quarantined": False, "last_updated": ""}
+    locks_data = {"locked_files": [], "task": "None", "status": "idle", "locked_by": "Peer"}
+
+    if os.path.exists(PEER_STATE_FILE):
+        try:
+            with open(PEER_STATE_FILE, "r", encoding="utf-8") as f:
+                p = json.load(f)
+            sender = p.get("sender", {})
+            state = p.get("state", {})
+            peer_data["name"] = sender.get("user", "Peer")
+            peer_data["role"] = sender.get("role", "contributor")
+            peer_data["last_updated"] = p.get("last_updated", "")
+
+            status = str(state.get("status", "idle")).lower()
+            peer_data["is_quarantined"] = (status == "quarantined")
+
+            # Check online status via freshness (< 300s since last ping or state sync)
+            if p.get("last_updated"):
+                try:
+                    clean_str = p["last_updated"].replace("Z", "+00:00")
+                    dt = datetime.datetime.fromisoformat(clean_str)
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=timezone.utc)
+                    diff = (datetime.datetime.now(timezone.utc) - dt).total_seconds()
+                    peer_data["is_online"] = (diff < 300) and not peer_data["is_quarantined"]
+                except Exception:
+                    pass
+
+            if not is_lock_expired(p.get("last_updated")):
+                locks_data["locked_files"] = state.get("locked_files", [])
+                locks_data["task"] = state.get("task", "None")
+                locks_data["status"] = status
+                locks_data["locked_by"] = peer_data["name"]
+            else:
+                locks_data["status"] = "idle"
+        except Exception:
+            pass
+
+    recent_events = []
+    if os.path.exists(ACTIVITY_LOG_FILE):
+        try:
+            with open(ACTIVITY_LOG_FILE, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+                recent_events = [l.strip() for l in lines[-8:] if l.strip()]
+        except Exception:
+            pass
+
+    return {
+        "node": {
+            "id": config.get("node_id", "local-node"),
+            "user": config.get("user", "User"),
+            "role": config.get("role", "lead"),
+            "room": config.get("relay_room", DEFAULT_ROOM),
+            "mode": config.get("mode", "hybrid"),
+            "security": config.get("security_mode", "prompt")
+        },
+        "peer": peer_data,
+        "locks": locks_data,
+        "recent_events": recent_events
+    }
+
+
+def generate_dashboard_html(config):
+    """Generate modern OLED pitch-black HTML5 dashboard with dynamic live polling."""
+    return """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Antigravity Link — Collaborative GUI</title>
+<style>
+  :root {
+    --bg: #000000;
+    --card-bg: #0d0d12;
+    --border: #1e1e28;
+    --accent: #7764d8;
+    --green: #2ed573;
+    --red: #ff4757;
+    --yellow: #ffa502;
+    --text: #f1f2f6;
+    --muted: #747d8c;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background-color: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    font-size: 13px;
+    line-height: 1.4;
+    padding: 14px;
+  }
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 10px;
+    margin-bottom: 12px;
+  }
+  .brand { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 15px; color: var(--text); }
+  .brand span { color: var(--accent); }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+  .badge-online { background: rgba(46, 213, 115, 0.15); color: var(--green); border: 1px solid var(--green); }
+  .badge-offline { background: rgba(255, 71, 87, 0.15); color: var(--red); border: 1px solid var(--red); }
+  .card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 10px;
+  }
+  .card-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--muted);
+    margin-bottom: 8px;
+    display: flex;
+    justify-content: space-between;
+  }
+  .row { display: flex; justify-content: space-between; margin-bottom: 4px; }
+  .label { color: var(--muted); }
+  .val { font-weight: 600; font-family: monospace; }
+  .file-item {
+    background: #000;
+    border: 1px solid #2a2a3a;
+    border-radius: 4px;
+    padding: 6px 8px;
+    margin-top: 4px;
+    font-family: monospace;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--yellow);
+  }
+  .btn {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    padding: 6px 12px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.2s;
+  }
+  .btn:hover { opacity: 0.85; }
+  .btn-danger { background: var(--red); }
+  .log-feed {
+    font-family: monospace;
+    font-size: 11px;
+    max-height: 110px;
+    overflow-y: auto;
+    background: #000;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px;
+    color: #a4b0be;
+  }
+  .log-line { margin-bottom: 3px; white-space: pre-wrap; word-break: break-all; }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">🤖 <span>Antigravity</span> Link</div>
+  <div id="peerPill" class="badge badge-offline">Connecting...</div>
+</header>
+
+<div class="card">
+  <div class="card-title">Peer Connection</div>
+  <div class="row"><span class="label">Local Node:</span><span class="val" id="localNode">-</span></div>
+  <div class="row"><span class="label">Remote Peer:</span><span class="val" id="peerUser">-</span></div>
+  <div class="row"><span class="label">Transport:</span><span class="val" id="transportMode">-</span></div>
+  <div class="row"><span class="label">Security Mode:</span><span class="val" id="secMode">-</span></div>
+</div>
+
+<div class="card">
+  <div class="card-title">Active File Locks ("Don't Step on Toes")</div>
+  <div id="locksContainer">
+    <div style="color: var(--green); font-size: 12px;">✔ No files locked. Safe to edit.</div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-title">Task Queue</div>
+  <div class="row"><span class="label">Active Task:</span><span class="val" id="activeTask" style="color: var(--accent);">None</span></div>
+  <div class="row"><span class="label">Task Status:</span><span class="val" id="taskStatus">idle</span></div>
+</div>
+
+<div class="card">
+  <div class="card-title">Recent Activity</div>
+  <div class="log-feed" id="logFeed">Loading...</div>
+</div>
+
+<div style="display: flex; gap: 8px; margin-top: 10px;">
+  <button class="btn" onclick="fetchStatus()">↻ Refresh</button>
+  <button class="btn btn-danger" id="unqBtn" style="display: none;" onclick="clearQuarantine()">Clear Quarantine</button>
+</div>
+
+<script>
+async function fetchStatus() {
+  try {
+    const res = await fetch('/api/status');
+    const d = await res.json();
+    document.getElementById('localNode').innerText = d.node.user + ' (' + d.node.role + ')';
+    document.getElementById('peerUser').innerText = d.peer.name + ' (' + d.peer.role + ')';
+    document.getElementById('transportMode').innerText = d.node.mode.toUpperCase();
+    document.getElementById('secMode').innerText = d.node.security.toUpperCase();
+
+    const pill = document.getElementById('peerPill');
+    const unqBtn = document.getElementById('unqBtn');
+    if (d.peer.is_quarantined) {
+      pill.className = 'badge badge-offline';
+      pill.innerText = '🚨 QUARANTINED';
+      unqBtn.style.display = 'inline-block';
+    } else if (d.peer.is_online) {
+      pill.className = 'badge badge-online';
+      pill.innerText = '🟢 ONLINE';
+      unqBtn.style.display = 'none';
+    } else {
+      pill.className = 'badge badge-offline';
+      pill.innerText = '🔴 OFFLINE';
+      unqBtn.style.display = 'none';
+    }
+
+    const locksDiv = document.getElementById('locksContainer');
+    if (d.locks.locked_files && d.locks.locked_files.length > 0) {
+      locksDiv.innerHTML = d.locks.locked_files.map(f =>
+        `<div class="file-item">🔒 ${f} <span style="color: var(--muted); font-size: 10px; margin-left: auto;">locked by ${d.locks.locked_by}</span></div>`
+      ).join('');
+    } else {
+      locksDiv.innerHTML = '<div style="color: var(--green); font-size: 12px;">✔ No files locked. Safe to edit.</div>';
+    }
+
+    document.getElementById('activeTask').innerText = d.locks.task || 'None';
+    document.getElementById('taskStatus').innerText = d.locks.status || 'idle';
+
+    if (d.recent_events && d.recent_events.length > 0) {
+      document.getElementById('logFeed').innerHTML = d.recent_events.map(e => `<div class="log-line">${e}</div>`).join('');
+    } else {
+      document.getElementById('logFeed').innerText = 'No recent activity recorded.';
+    }
+  } catch (e) {
+    document.getElementById('peerPill').className = 'badge badge-offline';
+    document.getElementById('peerPill').innerText = '⚠ DISCONNECTED';
+  }
+}
+
+async function clearQuarantine() {
+  await fetch('/api/unquarantine', { method: 'POST' });
+  fetchStatus();
+}
+
+setInterval(fetchStatus, 2000);
+fetchStatus();
+</script>
+</body>
+</html>"""
+
+
+def cmd_gui(args, config):
+    """Run lightweight embedded PyCharm collaborative web dashboard via Python standard library http.server."""
+    from http.server import HTTPServer, BaseHTTPRequestHandler
+
+    port = getattr(args, "port", 7891) or 7891
+
+    class LinkDashboardHandler(BaseHTTPRequestHandler):
+        def log_message(self, format, *args):
+            pass
+
+        def do_GET(self):
+            if self.path == "/" or self.path.startswith("/?"):
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
+                self.end_headers()
+                html_content = generate_dashboard_html(config)
+                self.wfile.write(html_content.encode("utf-8"))
+            elif self.path == "/api/status":
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header("Cache-Control", "no-cache")
+                self.end_headers()
+                status_data = get_dashboard_status(config)
+                self.wfile.write(json.dumps(status_data).encode("utf-8"))
+            else:
+                self.send_response(404)
+                self.end_headers()
+
+        def do_POST(self):
+            if self.path == "/api/unquarantine":
+                cmd_unquarantine(None, config)
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(json.dumps({"ok": True, "message": "Peer unquarantined successfully"}).encode("utf-8"))
+            else:
+                self.send_response(404)
+                self.end_headers()
+
+    server_address = ("127.0.0.1", port)
+    try:
+        httpd = HTTPServer(server_address, LinkDashboardHandler)
+    except OSError as e:
+        print(f"❌ Error starting web GUI on port {port}: {e}")
+        return 1
+
+    print("============================================================")
+    print("🌐 ANTIGRAVITY LINK — PYCHARM COLLABORATIVE WEB GUI")
+    print("============================================================")
+    print(f"URL:            http://127.0.0.1:{port}")
+    print(f"Local Node:     {config.get('user')} ({config.get('role')})")
+    print(f"Transport:      {config.get('mode', 'hybrid').upper()}")
+    print("PyCharm Access: Open View -> Tool Windows -> Web Browser")
+    print(f"                and navigate to: http://127.0.0.1:{port}")
+    print("------------------------------------------------------------")
+    print("🟢 Live GUI Dashboard active. Press Ctrl+C to stop.")
+    print("============================================================")
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        print("\n[+] Stopping web GUI dashboard...")
+    finally:
+        httpd.server_close()
+    return 0
+
+
 # -----------------------------------------------------------------------------
 # Main Entry Point
 # -----------------------------------------------------------------------------
@@ -1498,6 +1868,17 @@ def main():
 
     if first_arg in ("unquarantine", "clear-quarantine", "resume"):
         return cmd_unquarantine(None, config)
+
+    if first_arg in ("gui", "web", "dashboard"):
+        if any(h in sys.argv for h in ("--help", "-h")):
+            print("Usage: link gui [--port PORT]")
+            print("Run lightweight embedded PyCharm collaborative web GUI dashboard.")
+            return 0
+        port = 7891
+        if len(sys.argv) > 2 and sys.argv[2].isdigit():
+            port = int(sys.argv[2])
+        args = argparse.Namespace(port=port)
+        return cmd_gui(args, config)
 
     if first_arg in ("chat", "@chat"):
         return cmd_chat(None, config)
@@ -1604,9 +1985,11 @@ def main():
     p_sec = subparsers.add_parser("security", help="Inspect or set HITL security approval gate mode")
     p_sec.add_argument("mode_name", nargs="?", choices=["prompt", "session_trusted", "autonomous", "deny"], help="Security mode")
 
-    # init & unquarantine
+    # init & unquarantine & gui
     subparsers.add_parser("init", help="Run interactive setup wizard")
     subparsers.add_parser("unquarantine", help="Clear peer security quarantine status")
+    p_gui = subparsers.add_parser("gui", help="Run lightweight embedded PyCharm collaborative web GUI")
+    p_gui.add_argument("--port", type=int, default=7891, help="Port to bind web dashboard (default: 7891)")
 
     args = parser.parse_args()
 
@@ -1616,7 +1999,7 @@ def main():
         config["peer_port"] = args.peer_port
     if args.mode:
         config["mode"] = args.mode
-    if hasattr(args, "port") and args.port:
+    if hasattr(args, "port") and args.port and args.command != "gui":
         config["local_port"] = args.port
 
     if args.command == "status":
@@ -1647,6 +2030,8 @@ def main():
         return cmd_init(args, config)
     elif args.command == "unquarantine":
         return cmd_unquarantine(args, config)
+    elif args.command == "gui":
+        return cmd_gui(args, config)
     return 0
 
 

@@ -42,7 +42,7 @@ $shortcut.TargetPath = "cmd.exe"
 $shortcut.Arguments = "/c `"$batRunner`""
 $shortcut.WorkingDirectory = $repoDir
 $shortcut.WindowStyle = 1
-$shortcut.Description = "Launch Antigravity Link Chat with Mr-Reaper"
+$shortcut.Description = "Launch Antigravity Link Chat"
 $shortcut.Save()
 Write-Host "[✓] Created Desktop Shortcut: '$shortcutFile'" -ForegroundColor Green
 

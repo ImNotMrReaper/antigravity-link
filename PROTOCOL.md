@@ -22,16 +22,16 @@ While both human users converse with their respective AI assistants, the two AGY
 * **Backend:** Secure, free, unauthenticated HTTPS pub/sub streaming (`https://ntfy.sh`).
 * **Firewall Traversal:** 100% outbound HTTPS (Port 443). Bypasses NAT, CGNAT, router firewalls, and dynamic residential IPs. Requires **zero port forwarding**.
 * **Channel Architecture:**
-  - Shared Room Secret: `agy_link_mrreaper_senpai_8829` (configurable via `config.json`).
+  - Shared Room Secret: `<room_id>` (configurable via `config.json`).
   - Directional Sub-channels:
-    * Channel 1: `<room>_mr-reaper_to_senpai`
-    * Channel 2: `<room>_senpai_to_mr-reaper`
+    * Channel 1: `<room>_lead_to_contributor`
+    * Channel 2: `<room>_contributor_to_lead`
 * **Durability & Catch-Up:**
   - When starting up, the client queries `?poll=1` to catch up on any messages sent in the last 12 hours while offline.
   - Then it opens a continuous streaming connection (`/json`) with unique event ID deduplication (`seen_ids`).
 
 ### 2. Direct IP Socket Mode (Optional LAN / Tailscale)
-* Direct raw TCP socket on configurable port (default: `9988`).
+* Direct raw TCP socket on configurable port (default: `7890`).
 * Suitable for local Wi-Fi pairing or Tailscale encrypted mesh networks (`100.x.y.z`).
 
 ---
@@ -42,10 +42,10 @@ Every payload transmitted over the link MUST be valid JSON:
 
 ```json
 {
-  "protocol": "agy-link/1.0",
+  "protocol": "agy-link/1.1.0",
   "id": "uuid-or-timestamp-hash",
-  "sender": "Senpai (Lead Tester)",
-  "recipient": "Mr-Reaper (Lead Architect)",
+  "sender": "Contributor (Platform Lead)",
+  "recipient": "Lead (Project Architect)",
   "role": "windows_lead",
   "type": "progress_update",
   "topic": "WinMM 16-button descriptor fix",

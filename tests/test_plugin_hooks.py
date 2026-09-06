@@ -8,6 +8,7 @@ import os
 import sys
 import tempfile
 import subprocess
+from datetime import datetime, timezone
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 HOOKS_DIR = os.path.join(REPO_ROOT, ".agents", "plugins", "antigravity-link", "hooks")
@@ -28,7 +29,7 @@ class TestPluginLifecycleHooks(unittest.TestCase):
 
     def test_pre_invocation_injects_warning_when_files_locked(self):
         peer_state = {
-            "last_updated": "2026-09-06T00:00:00Z",
+            "last_updated": datetime.now(timezone.utc).isoformat(),
             "sender": {"user": "Senpai59", "role": "platform_lead"},
             "type": "state_sync",
             "state": {
@@ -58,7 +59,7 @@ class TestPluginLifecycleHooks(unittest.TestCase):
 
     def test_pre_invocation_empty_when_peer_completed(self):
         peer_state = {
-            "last_updated": "2026-09-06T00:00:00Z",
+            "last_updated": datetime.now(timezone.utc).isoformat(),
             "sender": {"user": "Senpai59", "role": "platform_lead"},
             "type": "state_sync",
             "state": {
@@ -83,7 +84,7 @@ class TestPluginLifecycleHooks(unittest.TestCase):
 
     def test_pre_tool_guard_blocks_locked_file(self):
         peer_state = {
-            "last_updated": "2026-09-06T00:00:00Z",
+            "last_updated": datetime.now(timezone.utc).isoformat(),
             "sender": {"user": "Senpai59", "role": "platform_lead"},
             "type": "state_sync",
             "state": {
@@ -118,7 +119,7 @@ class TestPluginLifecycleHooks(unittest.TestCase):
 
     def test_pre_tool_guard_allows_unlocked_file(self):
         peer_state = {
-            "last_updated": "2026-09-06T00:00:00Z",
+            "last_updated": datetime.now(timezone.utc).isoformat(),
             "sender": {"user": "Senpai59", "role": "platform_lead"},
             "type": "state_sync",
             "state": {
@@ -152,7 +153,7 @@ class TestPluginLifecycleHooks(unittest.TestCase):
 
     def test_pre_tool_guard_handles_windows_path_separators(self):
         peer_state = {
-            "last_updated": "2026-09-06T00:00:00Z",
+            "last_updated": datetime.now(timezone.utc).isoformat(),
             "sender": {"user": "Senpai59", "role": "platform_lead"},
             "type": "state_sync",
             "state": {
@@ -244,7 +245,7 @@ class TestPluginLifecycleHooks(unittest.TestCase):
 
     def test_pre_invocation_handles_quarantine(self):
         peer_state = {
-            "last_updated": "2026-09-06T00:00:00Z",
+            "last_updated": datetime.now(timezone.utc).isoformat(),
             "sender": {"user": "MaliciousPeer", "role": "attacker"},
             "type": "state_sync",
             "state": {
@@ -272,7 +273,7 @@ class TestPluginLifecycleHooks(unittest.TestCase):
 
     def test_pre_tool_guard_blocks_when_quarantined(self):
         peer_state = {
-            "last_updated": "2026-09-06T00:00:00Z",
+            "last_updated": datetime.now(timezone.utc).isoformat(),
             "sender": {"user": "MaliciousPeer", "role": "attacker"},
             "type": "state_sync",
             "state": {

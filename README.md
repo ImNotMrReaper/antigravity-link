@@ -22,12 +22,12 @@ When two developers pair-program on separate machines across the internet, their
 
 ```
 +------------------------------------+             +------------------------------------+
-|       Linux Machine (@Mr-Reaper)   |             |      Windows 11 Machine (@Senpai59)|
-|   Ubuntu 24.04 LTS (Wayland)       |             |         AMD Ryzen 5 3600           |
+|       Lead Node (Linux / macOS)    |             |      Contributor Node (Windows)    |
+|   Ubuntu 24.04 LTS / Unix          |             |         Windows 10 / 11 Native     |
 |                                    |             |                                    |
 |   +----------------------------+   |             |   +----------------------------+   |
 |   |    Antigravity AGY TUI     |   |             |   |    Antigravity AGY TUI     |   |
-|   |  /link, /senpai, /inbox    |   |             |   |  /link, /senpai, /inbox    |   |
+|   |   /link, /peer, /inbox     |   |             |   |   /link, /peer, /inbox     |   |
 |   +--------------+-------------+   |             |   +--------------+-------------+   |
 |                  |                 |             |                  |                 |
 |   +--------------v-------------+   |             |   +--------------v-------------+   |

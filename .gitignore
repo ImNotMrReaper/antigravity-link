@@ -3,6 +3,8 @@
 config.json
 INBOX.md
 LATEST.json
+repo_path.txt
+*.txt.bak
 
 # Python artifacts
 __pycache__/
