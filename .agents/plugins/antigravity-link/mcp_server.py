@@ -54,6 +54,19 @@ def find_agy_link():
     return "agy_link.py"
 
 
+# Ensure agy_link can be imported directly
+_agy_path = find_agy_link()
+if os.path.exists(_agy_path):
+    _agy_dir = os.path.dirname(os.path.abspath(_agy_path))
+    if _agy_dir not in sys.path:
+        sys.path.insert(0, _agy_dir)
+
+try:
+    import agy_link
+except Exception:
+    agy_link = None
+
+
 def run_agy_link(args):
     agy_link_py = find_agy_link()
     work_dir = os.path.dirname(os.path.abspath(agy_link_py)) if os.path.exists(agy_link_py) else None
@@ -234,17 +247,29 @@ def handle_request(req):
             file_arg = args.get("file", "")
             line_arg = args.get("line")
             col_arg = args.get("column")
-            cli_args = ["open", file_arg]
-            if line_arg is not None:
-                cli_args.extend(["--line", str(line_arg)])
-            if col_arg is not None:
-                cli_args.extend(["--column", str(col_arg)])
-            output = run_agy_link(cli_args)
+            if agy_link is not None and hasattr(agy_link, "open_in_ide"):
+                ok, msg = agy_link.open_in_ide(file_arg, line=line_arg, column=col_arg)
+                output = f"[{'OK' if ok else 'FAILED'}] {msg}"
+            else:
+                cli_args = ["open", file_arg]
+                if line_arg is not None:
+                    cli_args.extend(["--line", str(line_arg)])
+                if col_arg is not None:
+                    cli_args.extend(["--column", str(col_arg)])
+                output = run_agy_link(cli_args)
         elif tool_name == "link_gui":
             port = args.get("port", 7891)
+            status_line = ""
+            if agy_link is not None and hasattr(agy_link, "start_gui_server"):
+                try:
+                    ok, msg = agy_link.start_gui_server(port=port, log_fn=lambda m: sys.stderr.write(f"[MCP-GUI] {m}\n"))
+                    status_line = f"Status: {msg}\n\n"
+                except Exception as e:
+                    status_line = f"Notice: {e}\n\n"
             output = (
                 f"🌐 Antigravity Link — PyCharm Collaborative Web Dashboard\n"
                 f"URL: http://127.0.0.1:{port}\n\n"
+                f"{status_line}"
                 f"PyCharm Access:\n"
                 f"1. Open View -> Tool Windows -> Web Browser\n"
                 f"2. Navigate to: http://127.0.0.1:{port}\n"
@@ -284,6 +309,18 @@ def main():
         sys.stdin.reconfigure(encoding="utf-8", errors="replace")
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
+    # Start embedded background transport listener automatically
+    if agy_link is not None and hasattr(agy_link, "start_background_listener"):
+        try:
+            agy_link.start_background_listener(
+                log_fn=lambda m: sys.stderr.write(f"[MCP-LINK] {m}\n")
+            )
+            sys.stderr.write("[MCP-LINK] Embedded background transport listener active.\n")
+            sys.stderr.flush()
+        except Exception as e:
+            sys.stderr.write(f"[MCP-LINK] Warning: Could not start background listener: {e}\n")
+            sys.stderr.flush()
 
     for line in sys.stdin:
         line = line.strip()

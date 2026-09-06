@@ -251,6 +251,38 @@ class TestProtocolAndHMAC(unittest.TestCase):
         }
         self.assertFalse(verify_packet_signature(pkt, secret_key="configured_key", expected_token="configured_token"))
 
+    def test_start_background_listener_lifecycle(self):
+        import socket
+        import threading
+        from agy_link import start_background_listener
+
+        # Use an ephemeral port for TCP listener
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+        s.close()
+
+        config = dict(self.config)
+        config["local_host"] = "127.0.0.1"
+        config["local_port"] = port
+        config["relay_room"] = "test_listener_room_xyz"
+
+        stop_event = threading.Event()
+        log_messages = []
+        stop_ev, transport = start_background_listener(
+            config=config,
+            log_fn=lambda m: log_messages.append(m),
+            stop_event=stop_event
+        )
+
+        self.assertIsNotNone(stop_ev)
+        self.assertIsNotNone(transport)
+        self.assertFalse(stop_ev.is_set())
+
+        # Clean shutdown
+        stop_event.set()
+        self.assertTrue(stop_ev.is_set())
+
 
 if __name__ == "__main__":
     unittest.main()

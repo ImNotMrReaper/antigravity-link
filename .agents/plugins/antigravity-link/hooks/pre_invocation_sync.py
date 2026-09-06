@@ -22,6 +22,12 @@ def is_lock_expired(last_updated_str, ttl_seconds=7200):
         return False
 
 def find_peer_state(workspace_paths=None):
+    # 0. Environment variable override
+    if os.environ.get("AGY_LINK_DIR"):
+        cand = os.path.join(os.environ["AGY_LINK_DIR"], "peer_state.json")
+        if os.path.exists(cand):
+            return cand
+
     # 1. Workspace paths (highest priority - represents the active project)
     if workspace_paths:
         for wp in workspace_paths:
@@ -29,10 +35,16 @@ def find_peer_state(workspace_paths=None):
             if os.path.exists(cand):
                 return cand
 
-    # 2. Current working directory
-    cwd_cand = os.path.join(os.getcwd(), ".agy_link", "peer_state.json")
-    if os.path.exists(cwd_cand):
-        return cwd_cand
+    # 2. Walk up from current working directory
+    curr = os.path.abspath(os.getcwd())
+    while True:
+        cand = os.path.join(curr, ".agy_link", "peer_state.json")
+        if os.path.exists(cand):
+            return cand
+        parent = os.path.dirname(curr)
+        if parent == curr:
+            break
+        curr = parent
 
     # 3. repo_path.txt configured during installation
     script_dir = os.path.dirname(os.path.abspath(__file__))

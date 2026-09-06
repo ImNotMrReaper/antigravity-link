@@ -55,27 +55,27 @@ When two developers pair-program on separate machines across the internet, their
 
 ---
 
-## 🚀 1-Liner Quick Installation
+## 🚀 Plugin Installation
 
-### Linux (Ubuntu / Debian / Arch / Fedora):
-Run in your terminal:
+Install Antigravity Link natively using the `agy plugin` CLI:
+
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ImNotMrReaper/antigravity-link/main/install.sh | bash
+# Global installation for all projects
+git clone https://github.com/ImNotMrReaper/antigravity-link.git ~/.gemini/config/plugins/antigravity-link
+agy plugin install ~/.gemini/config/plugins/antigravity-link
 ```
 
-### Windows (PowerShell):
-Run in PowerShell:
-```powershell
-irm https://raw.githubusercontent.com/ImNotMrReaper/antigravity-link/main/install.ps1 | iex
+Or enable project-level tandem sync in your repository:
+```bash
+# Clone directly into project customization directory
+git clone https://github.com/ImNotMrReaper/antigravity-link.git .agents/plugins/antigravity-link
 ```
 
-*What the installer does automatically:*
-- Clones repository to your local user directory.
-- Adds `link` to your PATH (`~/.local/bin/link` on Linux, `link.cmd` in User PATH on Windows).
-- Registers the official plugin into `~/.gemini/config/plugins/antigravity-link`.
-- Configures global `plugins.json` and Model Context Protocol (MCP) server in `mcp_config.json`.
-- Registers the `agy-link://` URL protocol handler.
-- Runs `agy plugin validate` to confirm all components pass.
+*What happens automatically:*
+- **Automatic Lifecycle:** Antigravity launches `mcp_server.py` on session start; the background listener and cloud relay automatically activate without any external daemons or manual script execution.
+- **Embedded Web Dashboard:** Visit `http://127.0.0.1:7891` (or use PyCharm's built-in `View -> Tool Windows -> Web Browser`) for real-time mesh telemetry.
+- **Conflict Prevention:** Hooks intercept concurrent file modifications, prompting for confirmation before conflicts occur.
+- **Verification:** Run `agy plugin validate ~/.gemini/config/plugins/antigravity-link`.
 
 ---
 
@@ -86,9 +86,9 @@ The plugin conforms 100% to the Google Antigravity Plugin Specification:
 | Component | Path | Description |
 | :--- | :--- | :--- |
 | **Skills** | `skills/agy-link/SKILL.md` | Provides the agent with full operating rules, delegation CLI commands, and synchronization runbooks. |
-| **Agents** | `agents/senpai-ai.md` | Windows Lead subagent configuration for autonomous cross-machine handoffs. |
-| **Commands** | `commands/link.md`<br>`commands/senpai.md`<br>`commands/inbox.md` | Native AGY slash commands (`/link`, `/senpai`, `/inbox`) directly inside the chat interface. |
-| **MCP Server** | `mcp_server.py`<br>`mcp_config.json` | Exposes 5 stdio tools: `link_status`, `link_summon`, `link_send`, `link_sync`, `link_inbox`. |
+| **Agents** | `agents/peer-ai.md`<br>`agents/senpai-ai.md` | Remote peer AI and Windows Lead subagents for autonomous cross-machine handoffs. |
+| **Commands** | `commands/link.md`<br>`commands/peer.md`<br>`commands/senpai.md`<br>`commands/inbox.md` | Native AGY slash commands (`/link`, `/peer`, `/senpai`, `/inbox`) directly inside the chat interface. |
+| **MCP Server** | `mcp_server.py`<br>`mcp_config.json` | Exposes 7 stdio tools: `link_status`, `link_summon`, `link_send`, `link_sync`, `link_inbox`, `link_open`, `link_gui`. |
 | **Lifecycle Hooks** | `hooks.json`<br>`hooks/pre_invocation_sync.py`<br>`hooks/pre_tool_guard.py` | `PreInvocation` injects active peer locks into turn context; `PreToolUse` blocks concurrent writes to locked files. |
 
 Verify anytime with:
@@ -99,47 +99,44 @@ Output:
 ```text
   [ok]    ~/.gemini/config/plugins/antigravity-link
           ✔ skills      : 1 processed
-          ✔ agents      : 1 processed
-          ✔ commands    : 3 processed (converted to skills)
+          ✔ agents      : 2 processed
+          ✔ commands    : 4 processed (converted to skills)
           ✔ mcpServers  : 1 processed
           ✔ hooks       : 1 processed
 ```
 
 ---
 
-## 🛠️ Global CLI Usage (`link`)
+## 💬 AGY TUI Commands & Slash Integration
 
-Once installed, use the single-word `link` command anywhere on your system:
+Antigravity Link operates entirely inside the Antigravity TUI terminal and compatible IDEs (PyCharm, VS Code):
 
+```text
+/link status                                  Check connectivity and active file locks
+/link sync --task "<Task>" --files "<File>"   Broadcast task progress and lock files
+/link summon "<Task>"                         Summon both AIs to work autonomously
+/peer "<Task or message>"                     Delegate task directly to remote peer AI
+/senpai "<Task or message>"                   Delegate task specifically to Windows Lead AI
+/inbox                                        Read latest messages and task handoffs
+/link open <file> [--line <n>]                Open file in PyCharm editor tab
+/link gui                                     Display embedded collaborative web GUI URL
+```
+
+### CLI Utilities (`python3 agy_link.py`):
 ```bash
-# Open interactive terminal chat with your peer
-link chat
+# Check peer status and active locks
+python3 agy_link.py status
 
-# Summon BOTH Linux and Windows AIs to work on a task:
-link ai "Verify cross-platform joystick descriptor mappings"
+# Interactive live terminal chat with peer
+python3 agy_link.py chat
 
-# Delegate a task exclusively to Senpai's Windows AI:
-link senpai "Build and test the joycon-mouse Windows release package"
-
-# Delegate a task exclusively to Reaper's Linux AI:
-link reaper "Audit systemd uinput device permissions"
-
-# View active peer locks, current tasks, and node status:
-link status
-
-# View inbox summary of all received updates and reports:
-link inbox
-
-# Set your project role in the collaboration hierarchy:
-link role lead           # Project Architect (main branch authority)
-link role platform_lead  # Platform Owner (e.g. windows branch)
-link role contributor    # Feature developer
-link role tester         # Quality assurance & hardware validation
+# Pair session credentials
+python3 agy_link.py pair
 
 # Configure Human-in-the-Loop security gate mode:
-link security prompt            # (Default) GUI modal confirmation for every remote task
-link security session_trusted   # Auto-approves tasks from paired peer for this session
-link security deny              # Hard-rejects all incoming remote execution requests
+python3 agy_link.py security prompt            # (Default) GUI modal confirmation for every remote task
+python3 agy_link.py security session_trusted   # Auto-approves tasks from paired peer for this session
+python3 agy_link.py security deny              # Hard-rejects all incoming remote execution requests
 ```
 
 ---

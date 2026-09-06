@@ -136,6 +136,32 @@ class TestWebGUI(unittest.TestCase):
             httpd.shutdown()
             httpd.server_close()
 
+    def test_start_gui_server_lifecycle(self):
+        from agy_link import start_gui_server, _GUI_SERVER_INSTANCE
+        import agy_link
+
+        # Pick an ephemeral port
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+        s.close()
+
+        ok, msg = start_gui_server(port=port, config=self.config, log_fn=lambda m: None)
+        self.assertTrue(ok)
+        self.assertIn(str(port), msg)
+
+        # Calling again reports already active
+        ok2, msg2 = start_gui_server(port=port, config=self.config, log_fn=lambda m: None)
+        self.assertTrue(ok2)
+        self.assertIn("already active", msg2)
+
+        # Verify server actually answers HTTP request
+        req = urllib.request.Request(f"http://127.0.0.1:{port}/api/status")
+        with urllib.request.urlopen(req, timeout=2.0) as resp:
+            self.assertEqual(resp.status, 200)
+            data = json.loads(resp.read().decode("utf-8"))
+            self.assertEqual(data["node"]["user"], "TestUser")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -29,15 +29,19 @@ jobs:
         run: |
           python -m unittest discover -s tests -v
 
-      - name: Validate Linux Setup Scripts
-        if: runner.os == 'Linux'
+      - name: Validate Plugin Manifests
         run: |
-          bash -n install.sh
-          bash -n install_linux_shortcuts.sh
-          bash install_linux_shortcuts.sh
+          python -c "import json; json.load(open('.agents/plugins/antigravity-link/plugin.json')); json.load(open('.agents/plugins/antigravity-link/hooks.json')); json.load(open('.agents/plugins/antigravity-link/mcp_config.json'))"
 
-      - name: Validate Windows Setup Scripts
-        if: runner.os == 'Windows'
-        shell: powershell
+      - name: Validate MCP Server Communication
         run: |
-          powershell -ExecutionPolicy Bypass -File install_windows_shortcuts.ps1
+          python -c "
+          import subprocess, json, sys
+          p = subprocess.Popen([sys.executable, 'mcp_server.py'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+          init_req = json.dumps({'jsonrpc': '2.0', 'id': 1, 'method': 'initialize'}) + '\n'
+          list_req = json.dumps({'jsonrpc': '2.0', 'id': 2, 'method': 'tools/list'}) + '\n'
+          out, _ = p.communicate(input=init_req + list_req, timeout=10)
+          lines = [json.loads(line) for line in out.strip().splitlines() if line.strip()]
+          assert any(r.get('id') == 1 and 'serverInfo' in r.get('result', {}) for r in lines), 'MCP initialize failed'
+          assert any(r.get('id') == 2 and 'tools' in r.get('result', {}) for r in lines), 'MCP tools/list failed'
+          "

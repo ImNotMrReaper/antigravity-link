@@ -21,6 +21,7 @@ Use these commands directly in the AGY chat input:
 | **`/link status`** | Displays live link connectivity (Direct Socket & Cloud Relay) and active file locks. |
 | **`/link send <message>`** | Sends a direct chat message or technical note to the peer station. |
 | **`/link summon <task>`** | Summons both AI agents to autonomously execute a task and report back. |
+| **`/peer <task or message>`** | Directly communicates with or delegates a task to the remote peer AI station. |
 | **`/senpai <task or message>`** | Directly communicates with or delegates a task to Senpai's Windows 11 station. |
 | **`/inbox`** | Displays recent peer messages, task handoffs, and AI execution reports from `INBOX.md`. |
 | **`/link sync --task "<name>"`** | Broadcasts active task progress and locks files to prevent overlapping edits. |
