@@ -891,6 +891,8 @@ def request_user_permission(task_description, sender_info, config):
                       .replace('"', '`"')
                       .replace('$', '`$'))
         ps_cmd = (
+            '$ErrorActionPreference = "Stop"; '
+            'try { '
             'Add-Type -AssemblyName PresentationFramework; '
             f'$res = [System.Windows.MessageBox]::Show('
             f'"⚡ Antigravity Link Security Request`n`n'
@@ -901,6 +903,7 @@ def request_user_permission(task_description, sender_info, config):
             f'[System.Windows.MessageBoxButton]::YesNo, '
             f'[System.Windows.MessageBoxImage]::Question); '
             f'if ($res -eq [System.Windows.MessageBoxResult]::Yes) {{ exit 0 }} else {{ exit 1 }}'
+            '} catch { exit 1 }'
         )
         try:
             res = subprocess.run(["powershell", "-NoProfile", "-Command", ps_cmd], timeout=60)
