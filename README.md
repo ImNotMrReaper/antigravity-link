@@ -107,6 +107,19 @@ Output:
 
 ---
 
+## 📖 Day-to-Day Workflow (Zero-Touch)
+
+Antigravity Link is completely hands-off—no background terminal scripts or system services required. Everything executes directly inside your Antigravity chat:
+
+1. **Zero-Touch Startup:** Open your project in PyCharm and run `agy`. Antigravity spawns `mcp_server.py`, which silently activates background transport listeners (Direct TCP and Cloud Relay).
+2. **Check Status (`/link status`):** Instantly view connection health, active locks, and remote station telemetry.
+3. **Peer Messaging (`/link send <message>`):** Dispatch technical notes directly to your partner's IDE session with native OS desktop alerts.
+4. **Remote Task Delegation (`/peer <task>`):** Dispatch cross-platform validation or compile jobs. The remote machine owner confirms via native OS security prompt (`[Yes / No]`), and results stream directly back to your chat.
+5. **Conflict Prevention:** Tell your AI *"Lock file.py while I work on this feature"*. If the remote AI tries to touch the file, Antigravity's `PreToolUse` hook intercepts and blocks the write.
+6. **Embedded PyCharm Dashboard (`/link gui`):** Dock `http://127.0.0.1:7891` in PyCharm's built-in Web Browser tool window (`View -> Tool Windows -> Web Browser`) for real-time telemetry and one-click file navigation.
+
+---
+
 ## 💬 AGY TUI Commands & Slash Integration
 
 Antigravity Link operates entirely inside the Antigravity TUI terminal and compatible IDEs (PyCharm, VS Code):
