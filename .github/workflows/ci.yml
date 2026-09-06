@@ -31,6 +31,7 @@ jobs:
 
       - name: Validate Plugin Manifests
         run: |
+          python -c "import json; json.load(open('plugin.json')); json.load(open('hooks.json')); json.load(open('mcp_config.json'))"
           python -c "import json; json.load(open('.agents/plugins/antigravity-link/plugin.json')); json.load(open('.agents/plugins/antigravity-link/hooks.json')); json.load(open('.agents/plugins/antigravity-link/mcp_config.json'))"
 
       - name: Validate MCP Server Communication

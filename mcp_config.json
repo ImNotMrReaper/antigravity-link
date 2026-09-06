@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "antigravity-link": {
+      "command": "python",
+      "args": ["${pluginDir}/mcp_server.py"]
+    }
+  }
+}
