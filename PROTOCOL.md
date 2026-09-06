@@ -118,3 +118,42 @@ To support multi-user pair programming without collisions:
 * **Project Lead (`lead`):** Holds the master repository branch (`main`). Possesses ultimate architectural authority over merges, release tags, and project standards.
 * **Platform Lead (`platform_lead`):** Direct owner of platform-specific branch (e.g. `windows` branch for Senpai59). Autonomously manages platform testing, builds native executables (`.exe`, `.bat`), and submits proposed diffs/PRs to the Project Lead.
 * **Contributors & Testers:** Validate hardware, run benchmarks, and submit test reports without write permissions on protected branches.
+
+---
+
+## 🪝 Native Antigravity Lifecycle Hooks Architecture
+
+To achieve zero-overlap collision prevention directly inside Antigravity without requiring manual user checks, `antigravity-link` implements native lifecycle hooks configured in `hooks.json`:
+
+### 1. `PreInvocation` Hook (`hooks/pre_invocation_sync.py`)
+* **Trigger:** Executes automatically before every model invocation turn.
+* **Function:** Reads `.agy_link/peer_state.json`. If the remote peer has an active task with status `in-progress` and locked files:
+  - Injects a transient system warning (`ephemeralMessage`) into the agent's turn context.
+  - Informs the model of the peer's locked files, preventing the model from writing contradictory code or duplicate implementations.
+* **Output Payload:**
+  ```json
+  {
+    "injectSteps": [
+      {
+        "ephemeralMessage": "⚠️ [Antigravity Link] Peer Lock Active: Senpai59 (platform_lead) is currently working on: \"Refactoring WinMM bindings\". Locked files: [winmm_backend.py, joycon_mouse.py]. Coordinate before modifying shared files to prevent merge conflicts."
+      }
+    ]
+  }
+  ```
+
+### 2. `PreToolUse` Conflict Gate Hook (`hooks/pre_tool_guard.py`)
+* **Trigger:** Intercepts file modification tools (`replace_file_content`, `write_to_file`).
+* **Function:** Evaluates the target file against active locks in `.agy_link/peer_state.json`.
+* **Decision Gate:**
+  - If target file matches a locked file: returns `{"decision": "ask", "reason": "..."}` to halt execution and prompt the user.
+  - If target file is unlocked: returns `{"decision": "allow"}` to proceed instantly.
+
+---
+
+## 🧪 Continuous Integration & Verification
+
+The protocol is verified through a 16-test zero-dependency test suite running on Python's standard `unittest` framework:
+```bash
+python -m unittest discover -s tests -v
+```
+Automated GitHub Actions CI runs across Linux and Windows on Python 3.10, 3.11, 3.12, and 3.13.
