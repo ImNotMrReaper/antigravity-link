@@ -6,6 +6,20 @@ Blocks or prompts user when an agent attempts to edit a file currently locked by
 import sys
 import json
 import os
+from datetime import datetime, timezone
+
+def is_lock_expired(last_updated_str, ttl_seconds=7200):
+    if not last_updated_str:
+        return False
+    try:
+        clean_str = last_updated_str.replace("Z", "+00:00")
+        dt = datetime.fromisoformat(clean_str)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        now = datetime.now(timezone.utc)
+        return (now - dt).total_seconds() > ttl_seconds
+    except Exception:
+        return False
 
 def find_peer_state(workspace_paths=None):
     # 1. Workspace paths (highest priority - represents the active project)
@@ -84,7 +98,7 @@ def main():
             sender = data.get("sender", {})
             user = sender.get("user", "Peer AI")
 
-            if status == "in-progress" and locked_files:
+            if status == "in-progress" and locked_files and not is_lock_expired(data.get("last_updated")):
                 for lf in locked_files:
                     lf_clean = lf.strip().lower().replace("\\", "/")
                     lf_base = os.path.basename(lf_clean)

@@ -29,6 +29,7 @@ import platform
 import re
 import hashlib
 import hmac
+import html
 import select
 import shutil
 import socket
@@ -640,7 +641,10 @@ def request_user_permission(task_description, sender_info, config):
 
     # 1. Windows: Native PowerShell GUI MessageBox
     if sys.platform == "win32":
-        clean_task = task_description.replace('"', '`"').replace("'", "''")[:300]
+        clean_task = (task_description[:300]
+                      .replace('`', '``')
+                      .replace('"', '`"')
+                      .replace('$', '`$'))
         ps_cmd = (
             'Add-Type -AssemblyName PresentationFramework; '
             f'$res = [System.Windows.MessageBox]::Show('
@@ -667,10 +671,10 @@ def request_user_permission(task_description, sender_info, config):
         has_display = bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
         zenity_bin = shutil.which("zenity")
         if has_display and zenity_bin:
-            clean_task = task_description.replace('"', '\\"').replace("'", "\\'")[:300]
+            clean_task = html.escape(task_description[:300])
             msg = (
                 f"⚡ <b>Antigravity Link Security Gate</b>\n\n"
-                f"<b>Peer:</b> {sender_user} ({sender_role} on {sender_platform})\n\n"
+                f"<b>Peer:</b> {html.escape(sender_user)} ({html.escape(sender_role)} on {html.escape(sender_platform)})\n\n"
                 f"<b>Requested Task:</b>\n<i>{clean_task}</i>\n\n"
                 f"Allow this AI task to execute on your machine?"
             )

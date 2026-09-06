@@ -184,6 +184,64 @@ class TestPluginLifecycleHooks(unittest.TestCase):
         data = json.loads(res.stdout)
         self.assertEqual(data.get("decision"), "ask")
 
+    def test_pre_invocation_ignores_stale_expired_lock(self):
+        peer_state = {
+            "last_updated": "2020-01-01T00:00:00Z",
+            "sender": {"user": "Senpai59", "role": "platform_lead"},
+            "type": "state_sync",
+            "state": {
+                "task": "Old forgotten task",
+                "status": "in-progress",
+                "locked_files": ["ancient_file.py"]
+            }
+        }
+        with open(self.state_file, "w", encoding="utf-8") as f:
+            json.dump(peer_state, f)
+
+        payload = {"workspacePaths": [self.workspace_dir]}
+        res = subprocess.run(
+            [sys.executable, PRE_INVOCATION_SCRIPT],
+            input=json.dumps(payload),
+            text=True,
+            capture_output=True
+        )
+        self.assertEqual(res.returncode, 0)
+        data = json.loads(res.stdout)
+        self.assertEqual(data.get("injectSteps"), [])
+
+    def test_pre_tool_guard_allows_stale_expired_lock(self):
+        peer_state = {
+            "last_updated": "2020-01-01T00:00:00Z",
+            "sender": {"user": "Senpai59", "role": "platform_lead"},
+            "type": "state_sync",
+            "state": {
+                "task": "Old forgotten task",
+                "status": "in-progress",
+                "locked_files": ["ancient_file.py"]
+            }
+        }
+        with open(self.state_file, "w", encoding="utf-8") as f:
+            json.dump(peer_state, f)
+
+        payload = {
+            "workspacePaths": [self.workspace_dir],
+            "toolCall": {
+                "name": "replace_file_content",
+                "args": {
+                    "TargetFile": "/path/to/ancient_file.py"
+                }
+            }
+        }
+        res = subprocess.run(
+            [sys.executable, PRE_TOOL_SCRIPT],
+            input=json.dumps(payload),
+            text=True,
+            capture_output=True
+        )
+        self.assertEqual(res.returncode, 0)
+        data = json.loads(res.stdout)
+        self.assertEqual(data.get("decision"), "allow")
+
 
 if __name__ == "__main__":
     unittest.main()
