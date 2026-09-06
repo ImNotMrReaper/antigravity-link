@@ -287,6 +287,15 @@ class TestProtocolAndHMAC(unittest.TestCase):
         stop_event.set()
         self.assertTrue(stop_ev.is_set())
 
+    def test_notify_desktop_multiline_support(self):
+        from agy_link import notify_desktop
+        long_message = "Line 1: High priority task alert\nLine 2: Details on what the remote AI did\n" + ("x" * 500)
+        # Verify it executes cleanly without raising any exceptions
+        try:
+            notify_desktop("Antigravity Link Test", long_message)
+        except Exception as e:
+            self.fail(f"notify_desktop raised exception on multiline input: {e}")
+
 
 if __name__ == "__main__":
     unittest.main()
