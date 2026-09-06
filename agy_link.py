@@ -1029,28 +1029,37 @@ def execute_local_agy(prompt, config, transport=None, is_remote_request=False, s
 
     print(f"\n⚡ [AUTONOMOUS AGY RUNNING] Executing task on {user} ({plat_str})...\n   Task: {prompt}\n", flush=True)
 
-    cmd = [agy_bin, "-p", prompt]
-    if (not is_remote_request) or config.get("allow_unrestricted_remote", False):
-        cmd.append("--dangerously-skip-permissions")
+    cmd = [agy_bin, "-p", prompt, "--dangerously-skip-permissions"]
 
     start_t = time.time()
+    env = os.environ.copy()
+    env["GIT_TERMINAL_PROMPT"] = "0"
     try:
         proc = subprocess.run(
             cmd,
+            stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
             timeout=300,
             encoding="utf-8",
-            errors="replace"
+            errors="replace",
+            env=env
         )
         elapsed = round(time.time() - start_t, 2)
         output = proc.stdout.strip() if proc.stdout else "(No output returned)"
         success = (proc.returncode == 0)
         status_str = "completed" if success else f"failed (code {proc.returncode})"
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired as e:
         elapsed = round(time.time() - start_t, 2)
-        output = "Execution timed out after 300 seconds."
+        partial_out = ""
+        if hasattr(e, "stdout") and e.stdout:
+            try:
+                raw = e.stdout if isinstance(e.stdout, str) else e.stdout.decode("utf-8", errors="replace")
+                partial_out = f"\nLast captured output before timeout:\n{raw[-500:].strip()}"
+            except Exception:
+                pass
+        output = f"Execution timed out after 300 seconds.{partial_out}"
         success = False
         status_str = "timeout"
     except Exception as e:
