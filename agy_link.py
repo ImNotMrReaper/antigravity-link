@@ -932,6 +932,100 @@ def execute_local_agy(prompt, config, transport=None, is_remote_request=False, s
 
 
 # -----------------------------------------------------------------------------
+# PyCharm & IDE Integration Helpers
+# -----------------------------------------------------------------------------
+
+
+def get_ide_environment():
+    """Detect active IDE environment (PyCharm / JetBrains / VS Code / Standard Terminal)."""
+    if (
+        os.environ.get("PYCHARM_HOSTED")
+        or os.environ.get("TERMINAL_EMULATOR") == "JetBrains-JediTerm"
+        or "pycharm" in os.environ.get("SNAP_INSTANCE_NAME", "").lower()
+        or "pycharm" in os.environ.get("SNAP_NAME", "").lower()
+        or "idea" in os.environ.get("TERMINAL_EMULATOR", "").lower()
+        or os.environ.get("INTELLIJ_TERMINAL_COMMAND_BLOCKS_REWORKED")
+    ):
+        return "PyCharm (JetBrains-JediTerm)"
+    if os.environ.get("VSCODE_PID") or os.environ.get("TERM_PROGRAM") == "vscode":
+        return "VS Code"
+    return "Standard Terminal"
+
+
+def open_in_ide(filepath, line=None, column=None):
+    """Open a file directly in PyCharm / JetBrains IDE editor tab."""
+    if not filepath:
+        return False, "No file path specified"
+
+    # Resolve absolute path
+    abs_path = os.path.abspath(os.path.expanduser(filepath))
+    if not os.path.exists(abs_path):
+        repo_cand = os.path.join(SCRIPT_DIR, filepath)
+        if os.path.exists(repo_cand):
+            abs_path = repo_cand
+        else:
+            return False, f"File not found: {filepath}"
+
+    # Candidate IDE binaries
+    candidates = []
+    snap_pycharm = "/snap/bin/pycharm-community"
+    if os.path.exists(snap_pycharm):
+        candidates.append(snap_pycharm)
+
+    for b in ["charm", "pycharm-community", "pycharm", "idea", "pycharm64.exe", "charm.cmd"]:
+        w = shutil.which(b)
+        if w and w not in candidates:
+            candidates.append(w)
+
+    if sys.platform == "win32":
+        local_app_data = os.environ.get("LOCALAPPDATA", "")
+        program_files = os.environ.get("ProgramFiles", "C:\\Program Files")
+        for base in [local_app_data, program_files]:
+            c1 = os.path.join(base, "Programs", "PyCharm Community Edition", "bin", "pycharm64.exe")
+            c2 = os.path.join(base, "JetBrains", "PyCharm Community Edition", "bin", "pycharm64.exe")
+            for c in [c1, c2]:
+                if os.path.exists(c) and c not in candidates:
+                    candidates.append(c)
+
+    for bin_path in candidates:
+        try:
+            cmd = [bin_path]
+            if line is not None:
+                cmd.extend(["--line", str(line)])
+            if column is not None:
+                cmd.extend(["--column", str(column)])
+            cmd.append(abs_path)
+            subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return True, f"Opened '{os.path.basename(abs_path)}' in PyCharm ({bin_path})"
+        except Exception:
+            continue
+
+    # Fallback to system open
+    try:
+        if sys.platform == "win32":
+            os.startfile(abs_path)
+        else:
+            subprocess.Popen(["xdg-open", abs_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return True, f"Opened '{os.path.basename(abs_path)}' using system default handler"
+    except Exception as e:
+        return False, f"Failed to open file: {e}"
+
+
+def cmd_open(args, config):
+    """CLI command to open a file in PyCharm editor."""
+    filepath = getattr(args, "file", "")
+    line = getattr(args, "line", None)
+    col = getattr(args, "column", None)
+    ok, msg = open_in_ide(filepath, line=line, column=col)
+    if ok:
+        print(f"✅ {msg}")
+        return 0
+    else:
+        print(f"❌ {msg}")
+        return 1
+
+
+# -----------------------------------------------------------------------------
 # CLI Commands
 # -----------------------------------------------------------------------------
 
@@ -939,14 +1033,19 @@ def execute_local_agy(prompt, config, transport=None, is_remote_request=False, s
 def cmd_status(args, config):
     """Check connectivity, configuration, and peer state."""
     transport = NetworkTransport(config)
+    ide_env = get_ide_environment()
     print("============================================================")
     print(f"  AGY LINK STATUS - Node: {config.get('node_id')} ({platform.system().upper()})")
     print("============================================================")
+    if ide_env != "Standard Terminal":
+        print(f"IDE Terminal:   🚀 {ide_env}")
     print(f"User:           {config.get('user')} ({config.get('role')})")
     print(f"Local Listener: {config.get('local_host')}:{config.get('local_port')}")
     print(f"Peer Target:    {config.get('peer_host')}:{config.get('peer_port')}")
     print(f"Network Mode:   {config.get('mode').upper()}")
     print(f"Cloud Relay:    {transport.sub_topic}")
+    if "PyCharm" in ide_env:
+        print("Web Dashboard:  🟢 http://127.0.0.1:7891 (PyCharm: View -> Tool Windows -> Web Browser)")
     print("------------------------------------------------------------")
 
     # Test TCP
@@ -1523,7 +1622,8 @@ def get_dashboard_status(config):
             "role": config.get("role", "lead"),
             "room": config.get("relay_room", DEFAULT_ROOM),
             "mode": config.get("mode", "hybrid"),
-            "security": config.get("security_mode", "prompt")
+            "security": config.get("security_mode", "prompt"),
+            "ide": get_ide_environment()
         },
         "peer": peer_data,
         "locks": locks_data,
@@ -1585,7 +1685,7 @@ def generate_dashboard_html(config):
   .card {
     background: var(--card-bg);
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: 6px;
     padding: 12px;
     margin-bottom: 10px;
   }
@@ -1644,7 +1744,7 @@ def generate_dashboard_html(config):
 </head>
 <body>
 <header>
-  <div class="brand">🤖 <span>Antigravity</span> Link</div>
+  <div class="brand">🤖 <span>Antigravity</span> Link <span id="ideBadge" style="font-size: 10px; padding: 2px 6px; background: #1e1e28; border-radius: 4px; color: #a4b0be; margin-left: 6px;">PyCharm</span></div>
   <div id="peerPill" class="badge badge-offline">Connecting...</div>
 </header>
 
@@ -1664,6 +1764,16 @@ def generate_dashboard_html(config):
 </div>
 
 <div class="card">
+  <div class="card-title">PyCharm Tandem Actions</div>
+  <div style="display: flex; gap: 6px; margin-bottom: 6px;">
+    <input id="quickMsg" type="text" placeholder="Type chat message or @ai task prompt..." style="flex: 1; background: #000; border: 1px solid var(--border); border-radius: 4px; padding: 6px 8px; color: #fff; font-size: 11px;">
+    <button class="btn" onclick="sendQuickMsg()">Send</button>
+    <button class="btn" style="background: #2ed573;" onclick="summonQuickMsg()">@ai Summon</button>
+  </div>
+  <div id="actionFeedback" style="font-size: 11px; color: var(--muted); min-height: 14px;"></div>
+</div>
+
+<div class="card">
   <div class="card-title">Task Queue</div>
   <div class="row"><span class="label">Active Task:</span><span class="val" id="activeTask" style="color: var(--accent);">None</span></div>
   <div class="row"><span class="label">Task Status:</span><span class="val" id="taskStatus">idle</span></div>
@@ -1680,6 +1790,56 @@ def generate_dashboard_html(config):
 </div>
 
 <script>
+async function openFileInPyCharm(f) {
+  try {
+    const res = await fetch('/api/open?file=' + encodeURIComponent(f), { method: 'POST' });
+    const d = await res.json();
+    document.getElementById('actionFeedback').innerText = d.message || 'Opened in PyCharm';
+  } catch (e) {
+    document.getElementById('actionFeedback').innerText = 'Error opening in PyCharm';
+  }
+}
+
+async function sendQuickMsg() {
+  const inp = document.getElementById('quickMsg');
+  const msg = inp.value.trim();
+  if (!msg) return;
+  document.getElementById('actionFeedback').innerText = 'Sending message to peer...';
+  try {
+    const res = await fetch('/api/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: msg })
+    });
+    const d = await res.json();
+    document.getElementById('actionFeedback').innerText = d.message || 'Sent!';
+    inp.value = '';
+    fetchStatus();
+  } catch (e) {
+    document.getElementById('actionFeedback').innerText = 'Failed to send message';
+  }
+}
+
+async function summonQuickMsg() {
+  const inp = document.getElementById('quickMsg');
+  const prompt = inp.value.trim();
+  if (!prompt) return;
+  document.getElementById('actionFeedback').innerText = 'Summoning peer AI...';
+  try {
+    const res = await fetch('/api/summon', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: prompt, target: 'both' })
+    });
+    const d = await res.json();
+    document.getElementById('actionFeedback').innerText = d.message || 'Summon dispatched!';
+    inp.value = '';
+    fetchStatus();
+  } catch (e) {
+    document.getElementById('actionFeedback').innerText = 'Failed to summon AI';
+  }
+}
+
 async function fetchStatus() {
   try {
     const res = await fetch('/api/status');
@@ -1688,6 +1848,9 @@ async function fetchStatus() {
     document.getElementById('peerUser').innerText = d.peer.name + ' (' + d.peer.role + ')';
     document.getElementById('transportMode').innerText = d.node.mode.toUpperCase();
     document.getElementById('secMode').innerText = d.node.security.toUpperCase();
+    if (d.node.ide) {
+      document.getElementById('ideBadge').innerText = d.node.ide;
+    }
 
     const pill = document.getElementById('peerPill');
     const unqBtn = document.getElementById('unqBtn');
@@ -1708,7 +1871,7 @@ async function fetchStatus() {
     const locksDiv = document.getElementById('locksContainer');
     if (d.locks.locked_files && d.locks.locked_files.length > 0) {
       locksDiv.innerHTML = d.locks.locked_files.map(f =>
-        `<div class="file-item">🔒 ${f} <span style="color: var(--muted); font-size: 10px; margin-left: auto;">locked by ${d.locks.locked_by}</span></div>`
+        `<div class="file-item">🔒 ${f} <button class="btn" style="padding: 2px 6px; font-size: 10px; margin-left: auto;" onclick="openFileInPyCharm('${f}')">Open in PyCharm</button></div>`
       ).join('');
     } else {
       locksDiv.innerHTML = '<div style="color: var(--green); font-size: 12px;">✔ No files locked. Safe to edit.</div>';
@@ -1743,6 +1906,7 @@ fetchStatus();
 def cmd_gui(args, config):
     """Run lightweight embedded PyCharm collaborative web dashboard via Python standard library http.server."""
     from http.server import HTTPServer, BaseHTTPRequestHandler
+    from urllib.parse import urlparse, parse_qs
 
     port = getattr(args, "port", 7891) or 7891
 
@@ -1766,17 +1930,78 @@ def cmd_gui(args, config):
                 self.end_headers()
                 status_data = get_dashboard_status(config)
                 self.wfile.write(json.dumps(status_data).encode("utf-8"))
+            elif self.path.startswith("/api/open"):
+                query = parse_qs(urlparse(self.path).query)
+                filepath = query.get("file", [""])[0]
+                line = int(query.get("line", [0])[0]) if "line" in query else None
+                col = int(query.get("column", [0])[0]) if "column" in query else None
+                ok, msg = open_in_ide(filepath, line=line, column=col)
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(json.dumps({"ok": ok, "message": msg}).encode("utf-8"))
             else:
                 self.send_response(404)
                 self.end_headers()
 
         def do_POST(self):
+            content_len = int(self.headers.get("Content-Length", 0))
+            post_body = self.rfile.read(content_len) if content_len > 0 else b""
+            post_data = {}
+            if post_body:
+                try:
+                    post_data = json.loads(post_body.decode("utf-8"))
+                except Exception:
+                    pass
+
             if self.path == "/api/unquarantine":
                 cmd_unquarantine(None, config)
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.end_headers()
                 self.wfile.write(json.dumps({"ok": True, "message": "Peer unquarantined successfully"}).encode("utf-8"))
+            elif self.path.startswith("/api/open"):
+                query = parse_qs(urlparse(self.path).query)
+                filepath = post_data.get("file") or query.get("file", [""])[0]
+                line = post_data.get("line") or (int(query.get("line", [0])[0]) if "line" in query else None)
+                col = post_data.get("column") or (int(query.get("column", [0])[0]) if "column" in query else None)
+                ok, msg = open_in_ide(filepath, line=line, column=col)
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(json.dumps({"ok": ok, "message": msg}).encode("utf-8"))
+            elif self.path == "/api/send":
+                msg_text = post_data.get("message", "").strip()
+                if not msg_text:
+                    self.send_response(400)
+                    self.send_header("Content-Type", "application/json; charset=utf-8")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"ok": False, "message": "Empty message"}).encode("utf-8"))
+                    return
+                packet = make_packet("message", {"text": msg_text}, config)
+                transport = NetworkTransport(config)
+                ok, msg = transport.send(packet)
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(json.dumps({"ok": ok, "message": msg}).encode("utf-8"))
+            elif self.path == "/api/summon":
+                prompt = post_data.get("prompt", "").strip()
+                target = post_data.get("target", "both")
+                if not prompt:
+                    self.send_response(400)
+                    self.send_header("Content-Type", "application/json; charset=utf-8")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"ok": False, "message": "Empty prompt"}).encode("utf-8"))
+                    return
+                packet = make_packet("agent_summon", {"prompt": prompt, "target": target}, config)
+                transport = NetworkTransport(config)
+                ok, msg = transport.send(packet)
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(json.dumps({"ok": ok, "message": f"Summon dispatched ({target}): {msg}"}).encode("utf-8"))
             else:
                 self.send_response(404)
                 self.end_headers()
@@ -1985,11 +2210,15 @@ def main():
     p_sec = subparsers.add_parser("security", help="Inspect or set HITL security approval gate mode")
     p_sec.add_argument("mode_name", nargs="?", choices=["prompt", "session_trusted", "autonomous", "deny"], help="Security mode")
 
-    # init & unquarantine & gui
+    # init & unquarantine & gui & open
     subparsers.add_parser("init", help="Run interactive setup wizard")
     subparsers.add_parser("unquarantine", help="Clear peer security quarantine status")
     p_gui = subparsers.add_parser("gui", help="Run lightweight embedded PyCharm collaborative web GUI")
     p_gui.add_argument("--port", type=int, default=7891, help="Port to bind web dashboard (default: 7891)")
+    p_open = subparsers.add_parser("open", help="Open a file directly in PyCharm editor tab")
+    p_open.add_argument("file", help="File path to open in PyCharm")
+    p_open.add_argument("--line", "-l", type=int, default=None, help="Line number")
+    p_open.add_argument("--column", "-c", type=int, default=None, help="Column number")
 
     args = parser.parse_args()
 
@@ -2032,6 +2261,8 @@ def main():
         return cmd_unquarantine(args, config)
     elif args.command == "gui":
         return cmd_gui(args, config)
+    elif args.command == "open":
+        return cmd_open(args, config)
     return 0
 
 

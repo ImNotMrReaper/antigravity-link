@@ -42,3 +42,9 @@
   - `@ai <task>` or `@both <task>` — wakes both AIs to work in parallel.
   - `@senpai-ai <task>` — wakes Senpai's Windows AI agent.
   - `@reaper-ai <task>` — wakes Reaper's Linux AI agent.
+
+## 6. PyCharm & AGY TUI Integration
+- When collaborating inside PyCharm, keep all outputs inside the embedded terminal.
+- Use `/link open <file>` or native IDE file links to inspect locked or modified files in PyCharm editor tabs.
+- Open View -> Tool Windows -> Web Browser to `http://127.0.0.1:7891` for the collaborative live dashboard.
+

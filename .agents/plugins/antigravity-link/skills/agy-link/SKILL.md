@@ -24,6 +24,8 @@ Use these commands directly in the AGY chat input:
 | **`/senpai <task or message>`** | Directly communicates with or delegates a task to Senpai's Windows 11 station. |
 | **`/inbox`** | Displays recent peer messages, task handoffs, and AI execution reports from `INBOX.md`. |
 | **`/link sync --task "<name>"`** | Broadcasts active task progress and locks files to prevent overlapping edits. |
+| **`/link open <file>`** | Opens a file directly in PyCharm editor tabs at an optional line/column. |
+| **`/link gui`** | Displays URL and instructions for the PyCharm embedded collaborative web GUI. |
 
 ---
 
@@ -36,6 +38,9 @@ When writing code or orchestrating tasks, the agent can call these tools directl
 * **`link_send`**: Dispatches a text message to the peer.
 * **`link_sync`**: Broadcasts progression milestones and locks files.
 * **`link_inbox`**: Fetches the latest peer communication from `INBOX.md`.
+* **`link_open`**: Opens a file in PyCharm editor tabs (`file`, optional `line`, `column`).
+* **`link_gui`**: Retrieves PyCharm collaborative web dashboard URL (`http://127.0.0.1:7891`).
+
 
 ---
 

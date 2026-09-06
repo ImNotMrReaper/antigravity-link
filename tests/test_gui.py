@@ -9,7 +9,8 @@ import threading
 import time
 import socket
 from http.server import HTTPServer
-from agy_link import get_dashboard_status, generate_dashboard_html, cmd_unquarantine, PEER_STATE_FILE, ensure_dirs
+from agy_link import get_dashboard_status, generate_dashboard_html, cmd_unquarantine, get_ide_environment, open_in_ide, PEER_STATE_FILE, ensure_dirs
+from unittest.mock import patch
 
 
 class TestWebGUI(unittest.TestCase):
@@ -31,6 +32,26 @@ class TestWebGUI(unittest.TestCase):
         self.assertIn("recent_events", status)
         self.assertEqual(status["node"]["user"], "TestUser")
         self.assertEqual(status["node"]["role"], "lead")
+        self.assertIn("ide", status["node"])
+
+    def test_get_ide_environment(self):
+        with patch.dict("os.environ", {"TERMINAL_EMULATOR": "JetBrains-JediTerm"}):
+            self.assertIn("PyCharm", get_ide_environment())
+        with patch.dict("os.environ", {"SNAP_INSTANCE_NAME": "pycharm-community"}, clear=True):
+            self.assertIn("PyCharm", get_ide_environment())
+        with patch.dict("os.environ", {"TERM_PROGRAM": "vscode"}, clear=True):
+            self.assertEqual("VS Code", get_ide_environment())
+        with patch.dict("os.environ", {}, clear=True):
+            self.assertEqual("Standard Terminal", get_ide_environment())
+
+    def test_open_in_ide_validation(self):
+        ok, msg = open_in_ide("")
+        self.assertFalse(ok)
+        self.assertIn("No file", msg)
+
+        ok, msg = open_in_ide("nonexistent_file_xyz123.abc")
+        self.assertFalse(ok)
+        self.assertIn("File not found", msg)
 
     def test_generate_dashboard_html_contains_critical_elements(self):
         html_doc = generate_dashboard_html(self.config)
@@ -40,6 +61,9 @@ class TestWebGUI(unittest.TestCase):
         self.assertIn("activeTask", html_doc)
         self.assertIn("/api/status", html_doc)
         self.assertIn("fetchStatus", html_doc)
+        self.assertIn("openFileInPyCharm", html_doc)
+        self.assertIn("PyCharm Tandem Actions", html_doc)
+
 
     def test_gui_http_server_endpoints(self):
         # Find a free ephemeral port

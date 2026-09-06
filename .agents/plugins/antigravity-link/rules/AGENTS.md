@@ -40,9 +40,11 @@
   python3 agy_link.py summon "<Task prompt>" --target reaper  # (from Windows)
   ```
 
-## 6. Strict AGY TUI Isolation
-- All communication, task summaries, status updates, and reports must be rendered directly inside the AGY TUI session.
-- Never spawn external terminal windows or desktop emulator windows (Terminator, cmd.exe, wt.exe).
+## 6. PyCharm & AGY TUI Isolation
+- All communication, task summaries, status updates, and reports must be rendered directly inside the AGY TUI session inside PyCharm's embedded terminal (or native console).
+- Never spawn external terminal emulator windows (Terminator, cmd.exe, wt.exe).
+- Use `/link open <file>` or native clickable IDE file links to inspect shared or locked files in PyCharm editor tabs.
+- The PyCharm embedded Web GUI dashboard (`http://127.0.0.1:7891`) can be viewed directly in PyCharm's Web Browser tool window for continuous telemetry.
 - Users interact seamlessly via native AGY slash commands (`/link`, `/senpai`, `/inbox`) or natural language.
 
 ## 7. Human-in-the-Loop (HITL) Security Approval Gate

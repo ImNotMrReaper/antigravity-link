@@ -52,7 +52,12 @@ case "$1" in
         cd "$REPO_DIR" && git pull origin main
         ;;
     open)
-        xdg-open "$REPO_DIR" >/dev/null 2>&1 &
+        shift
+        if [ $# -gt 0 ]; then
+            exec python3 "$REPO_DIR/agy_link.py" open "$@"
+        else
+            /snap/bin/pycharm-community "$REPO_DIR" >/dev/null 2>&1 || xdg-open "$REPO_DIR" >/dev/null 2>&1 &
+        fi
         ;;
     *)
         exec python3 "$REPO_DIR/agy_link.py" "$@"

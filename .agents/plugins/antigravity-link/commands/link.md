@@ -52,3 +52,10 @@ Parse the user's arguments following `/link`:
 
 11. **`/link security [prompt|session_trusted|autonomous|deny]`**:
     - Inspect or configure the Human-in-the-Loop (HITL) security approval gate via `python3 agy_link.py security`.
+
+12. **`/link open <file> [--line <n>]`**:
+    - Open the file directly in the active PyCharm IDE editor tab at the specified line using `link_open` or `python3 agy_link.py open <file>`.
+
+13. **`/link gui`**:
+    - Display the URL and access instructions for the PyCharm embedded collaborative web GUI dashboard (`http://127.0.0.1:7891`).
+

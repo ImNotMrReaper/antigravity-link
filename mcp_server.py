@@ -140,6 +140,42 @@ TOOLS = [
             "properties": {},
             "required": []
         }
+    },
+    {
+        "name": "link_open",
+        "description": "Open a file directly in PyCharm IDE editor tab at an optional line and column.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "file": {
+                    "type": "string",
+                    "description": "Path to file to open in PyCharm"
+                },
+                "line": {
+                    "type": "integer",
+                    "description": "Optional line number to navigate to"
+                },
+                "column": {
+                    "type": "integer",
+                    "description": "Optional column number to navigate to"
+                }
+            },
+            "required": ["file"]
+        }
+    },
+    {
+        "name": "link_gui",
+        "description": "Get the URL and access instructions for the PyCharm embedded collaborative web GUI dashboard.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "port": {
+                    "type": "integer",
+                    "description": "Port number for GUI dashboard (default: 7891)"
+                }
+            },
+            "required": []
+        }
     }
 ]
 
@@ -194,6 +230,26 @@ def handle_request(req):
             output = run_agy_link(cmd_args)
         elif tool_name == "link_inbox":
             output = run_agy_link(["inbox"])
+        elif tool_name == "link_open":
+            file_arg = args.get("file", "")
+            line_arg = args.get("line")
+            col_arg = args.get("column")
+            cli_args = ["open", file_arg]
+            if line_arg is not None:
+                cli_args.extend(["--line", str(line_arg)])
+            if col_arg is not None:
+                cli_args.extend(["--column", str(col_arg)])
+            output = run_agy_link(cli_args)
+        elif tool_name == "link_gui":
+            port = args.get("port", 7891)
+            output = (
+                f"🌐 Antigravity Link — PyCharm Collaborative Web Dashboard\n"
+                f"URL: http://127.0.0.1:{port}\n\n"
+                f"PyCharm Access:\n"
+                f"1. Open View -> Tool Windows -> Web Browser\n"
+                f"2. Navigate to: http://127.0.0.1:{port}\n"
+                f"3. Live peer telemetry, active locks, and one-click 'Open in PyCharm' buttons are active."
+            )
         else:
             output = f"Unknown tool: {tool_name}"
 
