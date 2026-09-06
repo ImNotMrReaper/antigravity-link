@@ -34,7 +34,10 @@ class TestSecurityGateAndRoles(unittest.TestCase):
         self.assertFalse(result, "Deny mode must immediately reject incoming remote tasks")
 
     @patch("subprocess.run")
-    def test_security_gate_user_approved(self, mock_subproc):
+    @patch("shutil.which", return_value="/usr/bin/zenity")
+    @patch.dict(os.environ, {"DISPLAY": ":0"})
+    @patch("sys.platform", "linux")
+    def test_security_gate_linux_zenity_approved(self, mock_which, mock_subproc):
         mock_res = MagicMock()
         mock_res.returncode = 0  # 0 indicates Yes / Approved
         mock_subproc.return_value = mock_res
@@ -44,7 +47,10 @@ class TestSecurityGateAndRoles(unittest.TestCase):
         self.assertTrue(result, "User approval (exit code 0) should grant permission")
 
     @patch("subprocess.run")
-    def test_security_gate_user_denied(self, mock_subproc):
+    @patch("shutil.which", return_value="/usr/bin/zenity")
+    @patch.dict(os.environ, {"DISPLAY": ":0"})
+    @patch("sys.platform", "linux")
+    def test_security_gate_linux_zenity_denied(self, mock_which, mock_subproc):
         mock_res = MagicMock()
         mock_res.returncode = 1  # 1 indicates No / Denied / Closed
         mock_subproc.return_value = mock_res
@@ -52,6 +58,47 @@ class TestSecurityGateAndRoles(unittest.TestCase):
         config = {"security_mode": "prompt"}
         result = request_user_permission("Run arbitrary command", self.sender_info, config)
         self.assertFalse(result, "User denial (exit code 1) must block execution")
+
+    @patch("subprocess.run")
+    @patch("sys.platform", "win32")
+    def test_security_gate_windows_powershell_approved(self, mock_subproc):
+        mock_res = MagicMock()
+        mock_res.returncode = 0  # 0 indicates Yes
+        mock_subproc.return_value = mock_res
+
+        config = {"security_mode": "prompt"}
+        result = request_user_permission("Run test on windows", self.sender_info, config)
+        self.assertTrue(result, "Windows prompt approval (exit code 0) should grant permission")
+
+    @patch("subprocess.run")
+    @patch("sys.platform", "win32")
+    def test_security_gate_windows_powershell_denied(self, mock_subproc):
+        mock_res = MagicMock()
+        mock_res.returncode = 1  # 1 indicates No
+        mock_subproc.return_value = mock_res
+
+        config = {"security_mode": "prompt"}
+        result = request_user_permission("Run test on windows", self.sender_info, config)
+        self.assertFalse(result, "Windows prompt denial (exit code 1) must block execution")
+
+    @patch("builtins.input", return_value="y")
+    @patch("sys.stdin.isatty", return_value=True)
+    @patch("shutil.which", return_value=None)
+    @patch.dict(os.environ, {"DISPLAY": "", "WAYLAND_DISPLAY": ""})
+    @patch("sys.platform", "linux")
+    def test_security_gate_terminal_fallback_approved(self, mock_which, mock_isatty, mock_input):
+        config = {"security_mode": "prompt"}
+        result = request_user_permission("Run terminal command", self.sender_info, config)
+        self.assertTrue(result, "Terminal interactive 'y' should approve task")
+
+    @patch("sys.stdin.isatty", return_value=False)
+    @patch("shutil.which", return_value=None)
+    @patch.dict(os.environ, {"DISPLAY": "", "WAYLAND_DISPLAY": ""})
+    @patch("sys.platform", "linux")
+    def test_security_gate_headless_defaults_to_deny(self, mock_which, mock_isatty):
+        config = {"security_mode": "prompt"}
+        result = request_user_permission("Run headless command", self.sender_info, config)
+        self.assertFalse(result, "Headless non-interactive environment must default to safe denial")
 
     def test_role_hierarchy_completeness(self):
         valid_roles = ["lead", "platform_lead", "contributor", "tester"]

@@ -1,4 +1,4 @@
-# Antigravity Link — Universal Windows 1-Liner Installer
+# Antigravity Link - Universal Windows 1-Liner Installer
 # Usage: irm https://raw.githubusercontent.com/ImNotMrReaper/antigravity-link/main/install.ps1 | iex
 $ErrorActionPreference = "SilentlyContinue"
 $repoUrl = "https://github.com/ImNotMrReaper/antigravity-link.git"
@@ -7,7 +7,7 @@ $installDir = Join-Path $HOME "antigravity-link"
 if (Test-Path ".\agy_link.py") {
     $installDir = (Get-Location).Path
 } else {
-    Write-Host "📦 Cloning Antigravity Link to $installDir..." -ForegroundColor Cyan
+    Write-Host "[*] Cloning Antigravity Link to $installDir..." -ForegroundColor Cyan
     if (Test-Path "$installDir\.git") {
         Push-Location $installDir
         git pull origin main
@@ -17,7 +17,7 @@ if (Test-Path ".\agy_link.py") {
     }
 }
 
-Write-Host "🚀 Running Antigravity Link Windows Installer..." -ForegroundColor Cyan
+Write-Host "[*] Running Antigravity Link Windows Installer..." -ForegroundColor Cyan
 Push-Location $installDir
 & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $installDir "install_windows_shortcuts.ps1")
 Pop-Location

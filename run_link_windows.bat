@@ -6,7 +6,7 @@ cd /d "%~dp0"
 :MENU
 cls
 echo ============================================================
-echo   🤖 ANTIGRAVITY LINK — Windows Peer Node
+echo   ANTIGRAVITY LINK - Windows Peer Node
 echo ============================================================
 echo   [1] Start Live Terminal Chat with Peer AI
 echo   [2] Run Sync Daemon (Foreground Console)
@@ -37,14 +37,14 @@ if "%choice%"=="2" (
 )
 if "%choice%"=="3" (
     cscript //nologo start_daemon_hidden.vbs
-    echo [✓] AGY Link Daemon started in silent background!
+    echo [OK] AGY Link Daemon started in silent background!
     timeout /t 3 >nul
     goto MENU
 )
 if "%choice%"=="4" (
     taskkill /F /FI "WINDOWTITLE eq *agy_link.py*" >nul 2>&1
     wmic process where "commandline like '%%agy_link.py daemon%%'" delete >nul 2>&1
-    echo [✓] Background daemon stopped.
+    echo [OK] Background daemon stopped.
     pause
     goto MENU
 )
@@ -74,7 +74,7 @@ if "%choice%"=="7" (
 if "%choice%"=="8" (
     cls
     echo ============================================================
-    echo   ⚡ SUMMON AI AGENT
+    echo   SUMMON AI AGENT
     echo ============================================================
     set /p targetchoice="Target (both / remote / local) [default: both]: "
     if "%targetchoice%"=="" set targetchoice=both
