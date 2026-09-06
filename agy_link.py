@@ -242,12 +242,12 @@ def open_inbox_window():
 
 
 def notify_desktop(title, message):
-    """Emit desktop notification supporting full multiline expandable bodies on Linux and Windows."""
+    """Emit lightweight desktop notification without external terminal popups."""
     def _worker():
         system = platform.system()
-        clean_msg = str(message or "").strip()
-        if len(clean_msg) > 2048:
-            clean_msg = clean_msg[:2045] + "..."
+        clean_msg = " ".join(str(message or "").strip().split())
+        if len(clean_msg) > 120:
+            clean_msg = clean_msg[:117] + "..."
 
         try:
             if system == "Linux" and shutil.which("notify-send"):
@@ -256,7 +256,6 @@ def notify_desktop(title, message):
                         "notify-send",
                         "-a", "Antigravity Link",
                         "-i", "dialog-information",
-                        "-u", "normal",
                         title,
                         clean_msg
                     ],
@@ -264,36 +263,16 @@ def notify_desktop(title, message):
                     timeout=5
                 )
             elif system == "Windows":
-                xml_title = html.escape(title).replace('`', '``').replace('$', '`$')
-                xml_body = html.escape(clean_msg).replace('`', '``').replace('$', '`$')
+                clean_title = title.replace('"', '`"')
+                clean_msg_win = clean_msg[:100].replace('"', '`"')
                 ps = (
-                    '$ErrorActionPreference = "SilentlyContinue"; '
-                    'try { '
-                    '[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null; '
-                    '[Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] | Out-Null; '
-                    '$template = @"' + "\n"
-                    '<toast>' + "\n"
-                    '  <visual>' + "\n"
-                    '    <binding template="ToastGeneric">' + "\n"
-                    f'      <text>{xml_title}</text>' + "\n"
-                    f'      <text>{xml_body}</text>' + "\n"
-                    '    </binding>' + "\n"
-                    '  </visual>' + "\n"
-                    '</toast>' + "\n"
-                    '"@; '
-                    '$xml = New-Object Windows.Data.Xml.Dom.XmlDocument; '
-                    '$xml.LoadXml($template); '
-                    '$toast = [Windows.UI.Notifications.ToastNotification]::new($xml); '
-                    '[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier("Antigravity Link").Show($toast); '
-                    '} catch { '
-                    '[reflection.assembly]::loadwithpartialname("System.Windows.Forms") | Out-Null; '
-                    '$n = new-object system.windows.forms.notifyicon; '
-                    '$n.icon = [system.drawing.systemicons]::Information; '
-                    '$n.visible = $true; '
-                    f'$n.showballoontip(8, "{xml_title[:64]}", "{xml_body[:255]}", [system.windows.forms.tooltipicon]::Info); '
-                    '}'
+                    f'[reflection.assembly]::loadwithpartialname("System.Windows.Forms");'
+                    f'$n = new-object system.windows.forms.notifyicon;'
+                    f'$n.icon = [system.drawing.systemicons]::Information;'
+                    f'$n.visible = $true;'
+                    f'$n.showballoontip(5, "{clean_title}", "{clean_msg_win}", [system.windows.forms.tooltipicon]::Info);'
                 )
-                subprocess.run(["powershell", "-NoProfile", "-Command", ps], check=False, timeout=5)
+                subprocess.run(["powershell", "-NoProfile", "-Command", ps], check=False, timeout=3)
         except Exception:
             pass
 
@@ -592,26 +571,11 @@ def update_peer_state(packet):
         f.write(md_entry)
 
     log_activity(f"Received [{p_type}] from {sender.get('user')}: {str(payload)[:80]}")
-    if p_type == "agent_report":
-        task_label = payload.get("task", "")
-        rep_text = payload.get("report", "").strip()
-        notif_summary = f"Task Report: {task_label}\n\n{rep_text}" if task_label else rep_text
-    elif p_type == "task_delegation":
-        t_title = payload.get("title", "")
-        t_desc = payload.get("description", "").strip()
-        notif_summary = f"Delegated Task: {t_title}\n\n{t_desc}" if t_desc else t_title
-    elif p_type == "state_sync":
-        s_task = payload.get("task", "")
-        s_status = payload.get("status", "")
-        s_files = payload.get("locked_files", [])
-        notif_summary = f"Task: {s_task} [{s_status}]"
-        if s_files:
-            notif_summary += f"\nActive Files: {', '.join(s_files)}"
-    elif p_type == "agent_summon":
-        notif_summary = f"Summon Request:\n{payload.get('task', '')}"
-    else:
-        notif_summary = payload.get("text") or payload.get("task") or payload.get("title") or ""
-
+    notif_summary = (
+        payload.get("report", "")[:80]
+        if p_type == "agent_report"
+        else (payload.get("task") or payload.get("title") or payload.get("text") or "")
+    )
     notify_desktop(f"AGY [{p_type.upper()}]: {sender.get('user')}", notif_summary)
 
 
@@ -922,7 +886,7 @@ def request_user_permission(task_description, sender_info, config):
     sender_platform = sender_info.get("platform", "").upper()
 
     log_activity(f"Security Gate: Requesting owner approval for task from {sender_user}: {task_description[:60]}")
-    notify_desktop("Antigravity Link Security Gate", f"Task request from {sender_user}:\n{task_description}")
+    notify_desktop("Antigravity Link Security Gate", f"Task request from {sender_user}: {task_description[:60]}")
 
     # 1. Windows: Native PowerShell GUI MessageBox
     if sys.platform == "win32":
@@ -1025,7 +989,7 @@ def execute_local_agy(prompt, config, transport=None, is_remote_request=False, s
 
     agy_bin = find_agy_executable()
     log_activity(f"Executing AGY task: {prompt[:80]}")
-    notify_desktop(f"AGY [{plat_str}] Autonomous Agent", f"Task started:\n{prompt}")
+    notify_desktop(f"AGY [{plat_str}] Autonomous Agent", f"Task started: {prompt[:80]}")
 
     print(f"\n⚡ [AUTONOMOUS AGY RUNNING] Executing task on {user} ({plat_str})...\n   Task: {prompt}\n", flush=True)
 

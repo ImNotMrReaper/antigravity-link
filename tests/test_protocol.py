@@ -287,7 +287,7 @@ class TestProtocolAndHMAC(unittest.TestCase):
         stop_event.set()
         self.assertTrue(stop_ev.is_set())
 
-    def test_notify_desktop_multiline_support(self):
+    def test_notify_desktop_sanitization(self):
         from agy_link import notify_desktop
         long_message = "Line 1: High priority task alert\nLine 2: Details on what the remote AI did\n" + ("x" * 500)
         # Verify it executes cleanly without raising any exceptions
