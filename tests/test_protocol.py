@@ -296,6 +296,21 @@ class TestProtocolAndHMAC(unittest.TestCase):
         except Exception as e:
             self.fail(f"notify_desktop raised exception on multiline input: {e}")
 
+    def test_shared_project_boundary_detection(self):
+        from agy_link import detect_project_context
+        # Shared project matches
+        self.assertEqual(detect_project_context(task="Fix joycon-mouse stick acceleration curve"), "joycon-mouse")
+        self.assertEqual(detect_project_context(task="Update antigravity-link protocol test"), "antigravity-link")
+        self.assertEqual(detect_project_context(files=["modes/air_mouse.py"]), "joycon-mouse")
+        self.assertEqual(detect_project_context(files=["agy_link.py"]), "antigravity-link")
+        self.assertEqual(detect_project_context(explicit_project="joycon-mouse"), "joycon-mouse")
+
+        # Independent work matches should return None
+        self.assertIsNone(detect_project_context(task="Configure Heroic Games Launcher show apps menu"))
+        self.assertIsNone(detect_project_context(task="GNOME Shell OLED pitch black preset"))
+        self.assertIsNone(detect_project_context(task="Optimize Steam game ARK graphics settings"))
+        self.assertIsNone(detect_project_context(files=["/etc/pam.d/howdy"]))
+
 
 if __name__ == "__main__":
     unittest.main()

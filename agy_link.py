@@ -170,6 +170,72 @@ def save_config(cfg):
         pass
 
 
+DEFAULT_SHARED_PROJECTS = ["antigravity-link", "joycon-mouse"]
+
+
+def get_shared_projects(config=None):
+    """Return list of recognized shared collaboration projects."""
+    config = config or load_config()
+    return config.get("shared_projects", DEFAULT_SHARED_PROJECTS)
+
+
+def detect_project_context(files=None, task=None, explicit_project=None, cwd=None, config=None):
+    """
+    Determine if a given action or task is scoped to a shared collaborative project.
+    Returns the project name if recognized, or None if independent/unrecognized.
+    """
+    shared = get_shared_projects(config)
+    if explicit_project:
+        clean = explicit_project.strip().lower()
+        for sp in shared:
+            if sp.lower() == clean or sp.lower() in clean or clean in sp.lower():
+                return sp
+        return None
+
+    # Check for known independent markers first
+    independent_keywords = [
+        "heroic", "gnome", "gtk", "pitch-black", "pitch black", "theme", "lock screen",
+        "lockscreen", "steam game", "ark", "howdy", "fingerprint", "pam", "gemini pwa",
+        "youtube pwa", "wallpaper", "fastfetch", "timeshift"
+    ]
+    if task:
+        t_lower = task.lower()
+        if any(ik in t_lower for ik in independent_keywords):
+            return None
+
+    if files:
+        # If files are explicitly provided, check if any belong to shared projects
+        for f in files:
+            f_lower = str(f).lower()
+            for sp in shared:
+                if sp.lower() in f_lower:
+                    return sp
+                if "modes/" in f_lower or "custom_modes/" in f_lower or "joycon" in f_lower:
+                    return "joycon-mouse"
+                if "agy_link" in f_lower:
+                    return "antigravity-link"
+        # If explicit files were provided but none matched shared projects, it is independent
+        return None
+
+    if task:
+        t_lower = task.lower()
+        for sp in shared:
+            if sp.lower() in t_lower:
+                return sp
+            if sp == "joycon-mouse" and any(k in t_lower for k in ["joycon", "joy-con", "dualsense", "gamepad", "uinput", "winmm", "rumble", "air mouse", "media remote"]):
+                return "joycon-mouse"
+            if sp == "antigravity-link" and any(k in t_lower for k in ["agy_link", "antigravity-link", "peer ai", "tandem sync", "security gate"]):
+                return "antigravity-link"
+
+    # Fallback to CWD only if task and files were not provided or neutral
+    check_dir = (cwd or os.path.abspath(os.getcwd())).lower()
+    for sp in shared:
+        if sp.lower() in check_dir:
+            return sp
+
+    return None
+
+
 def log_activity(entry):
     """Append activity to .agy_link/activity.log."""
     ensure_dirs()
@@ -593,13 +659,25 @@ def update_peer_state(packet):
     with open(INBOX_FILE, "a", encoding="utf-8") as f:
         f.write(md_entry)
 
-    log_activity(f"Received [{p_type}] from {sender.get('user')}: {str(payload)[:80]}")
-    notif_summary = (
-        payload.get("report", "")[:80]
-        if p_type == "agent_report"
-        else (payload.get("task") or payload.get("title") or payload.get("text") or "")
-    )
-    notify_desktop(f"AGY [{p_type.upper()}]: {sender.get('user')}", notif_summary)
+    # Shared project boundary: only emit desktop notifications for shared projects
+    proj = payload.get("project")
+    if proj is None:
+        proj = detect_project_context(
+            files=payload.get("locked_files"),
+            task=payload.get("task") or payload.get("title") or payload.get("text")
+        )
+
+    if proj == "independent":
+        log_activity(f"Suppressed desktop notification for independent task from {sender.get('user')}: {str(payload)[:60]}")
+    else:
+        log_activity(f"Received [{p_type}] from {sender.get('user')}: {str(payload)[:80]}")
+        notif_summary = (
+            payload.get("report", "")[:80]
+            if p_type == "agent_report"
+            else (payload.get("task") or payload.get("title") or payload.get("text") or "")
+        )
+        tag = f"{p_type.upper()}:{proj}" if proj else p_type.upper()
+        notify_desktop(f"AGY [{tag}]: {sender.get('user')}", notif_summary)
 
 
 # -----------------------------------------------------------------------------
@@ -1239,11 +1317,17 @@ def cmd_status(args, config):
 def cmd_sync(args, config):
     """Broadcast state, current task, and locked files to prevent conflicts."""
     files = [f.strip() for f in args.files.split(",") if f.strip()] if args.files else []
+    explicit_project = getattr(args, "project", None)
+    force = getattr(args, "force", False)
+
+    project = detect_project_context(files=files, task=args.task, explicit_project=explicit_project, config=config)
+
     payload = {
         "task": args.task,
         "status": args.status,
         "locked_files": files,
         "notes": args.notes or "",
+        "project": project or "independent",
     }
 
     # Save to local state
@@ -1257,13 +1341,21 @@ def cmd_sync(args, config):
     except Exception:
         pass
 
+    # Shared project boundary check: only broadcast if task belongs to a shared project (or --force)
+    if not project and not force:
+        shared_list = ", ".join(get_shared_projects(config))
+        print(f"[ℹ️] Local/independent task detected ('{args.task[:60]}').")
+        print(f"    Saved to local state only. Skipping broadcast to peer (shared projects: {shared_list}).")
+        log_activity(f"Local sync recorded (not broadcasted): {args.task} [{args.status}]")
+        return 0
+
     packet = make_packet("state_sync", payload, config)
     transport = NetworkTransport(config)
     print(f"[+] Broadcasting state sync: [{args.status.upper()}] {args.task}...", end=" ", flush=True)
     ok, msg = transport.send(packet)
     if ok:
         print(f"✅ {msg}")
-        log_activity(f"Broadcasted sync: {args.task} [{args.status}]")
+        log_activity(f"Broadcasted sync: {args.task} [{args.status}] (Project: {project or 'shared'})")
         return 0
     print(f"❌ Failed: {msg}")
     return 1
@@ -2363,6 +2455,8 @@ def main():
     p_sync.add_argument("--status", choices=["started", "in-progress", "completed", "blocked"], default="in-progress")
     p_sync.add_argument("--files", help="Comma-separated list of locked/active files")
     p_sync.add_argument("--notes", help="Contextual notes for peer AI")
+    p_sync.add_argument("--project", help="Shared project name (auto-detected by default)")
+    p_sync.add_argument("--force", action="store_true", help="Force broadcast even if outside recognized shared projects")
 
     # delegate
     p_del = subparsers.add_parser("delegate", help="Delegate cross-platform task to peer AI")

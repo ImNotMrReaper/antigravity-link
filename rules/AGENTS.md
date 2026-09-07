@@ -7,12 +7,14 @@
   ```
 - If files are currently marked as locked or in-progress by the remote peer station, coordinate with the peer agent before modifying them.
 
-## 2. Real-Time Progression Broadcasting
-- Whenever you start, update, or complete a task milestone, broadcast your progress so the peer AI's context updates in real-time:
+## 2. Real-Time Progression Broadcasting (Shared Projects Only)
+- **Strict Collaborative Scope:** Antigravity Link synchronization, task delegations, and desktop notifications must STRICTLY be reserved for shared collaborative repositories (`antigravity-link` and `joycon-mouse`).
+- **Zero Independent Work Sharing:** Never broadcast progress (`sync`), delegate tasks (`delegate`), summon the peer AI (`summon`), or emit notifications for independent work, local OS customization, personal app shortcuts, local game tuning, or machine-specific maintenance.
+- Whenever you start, update, or complete a task milestone on a **shared project**, broadcast your progress so the peer AI's context updates in real-time:
   ```bash
   python3 agy_link.py sync --task "<Task Title>" --status "in-progress" --files "<Modified Files>"
   ```
-- When a task is completed:
+- When a shared task is completed:
   ```bash
   python3 agy_link.py sync --task "<Task Title>" --status "completed" --files "<Modified Files>"
   ```
