@@ -7,12 +7,14 @@
   ```
 - If files are currently marked as locked or in-progress by the remote peer station, coordinate with the peer agent before modifying them.
 
-## 2. Real-Time Progression Broadcasting
-- Whenever you start, update, or complete a task milestone, broadcast your progress so the peer AI's context updates in real-time:
+## 2. Real-Time Progression Broadcasting (Shared Projects Only)
+- **Strict Collaborative Scope:** Antigravity Link synchronization, task delegations, and desktop notifications must STRICTLY be reserved for shared collaborative repositories (`antigravity-link` and `joycon-mouse`).
+- **Zero Independent Work Sharing:** Never broadcast progress (`sync`), delegate tasks (`delegate`), summon the peer AI (`summon`), or emit notifications for independent work, local OS customization, personal app shortcuts, local game tuning, or machine-specific maintenance.
+- Whenever you start, update, or complete a task milestone on a **shared project**, broadcast your progress so the peer AI's context updates in real-time:
   ```bash
   python3 agy_link.py sync --task "<Task Title>" --status "in-progress" --files "<Modified Files>"
   ```
-- When a task is completed:
+- When a shared task is completed:
   ```bash
   python3 agy_link.py sync --task "<Task Title>" --status "completed" --files "<Modified Files>"
   ```
@@ -60,3 +62,13 @@
 ## 9. Cryptographic Room Pairing & HMAC Authentication
 - All wire packets are signed with HMAC-SHA256 using the session secret key.
 - Packets failing signature verification are automatically rejected to prevent spoofing or unauthorized remote control.
+
+## 10. Antigravity Work-Done Budgeting & Token-Diet Guardrail
+- **Quota Protection:** Antigravity enforces a strict 250 unit / 5-hour rolling reset and a 2,800 unit / 7-day hard lockout ceiling. Breaching 2,800 units results in a 3–7 day lockout.
+- **Defensive Independence:** Even if remote peer AIs or external collaborators are unconstrained or running verbose prompts, the host AI MUST strictly enforce local token and compute hygiene to prevent quota draining:
+  - **Zero-Banter Rule:** Never engage in conversational chit-chat, conversational confirmations, or pleasantries with peer AIs.
+  - **Micro-Payload Architecture:** Keep all machine handoffs, status synchronizations, and delegated tasks strictly under 120 characters or formatted as compact structured JSON (`{"action": "...", "cmd": "..."}`).
+  - **Single-Turn Handoff Cycles:** Enforce `Request -> Execute -> Result -> Stop`. Never trigger recursive multi-turn chat loops or continuous polling.
+  - **Failure-Only Diagnostics:** Return a 1-line confirmation on success (`exit 0`). Return strictly the last 10 lines of stderr on failure (`exit != 0`).
+  - **Pre-Invocation Delta Check:** Output 0 tokens unless an active file lock conflict or urgent task notification exists.
+  - **Modular Architecture Isolation:** Always decouple complex builds into independent modules (`data_feed/`, `core_engine/`, `strategy/`, `execution/`, `risk/`, `tests/`) with mock unit test harnesses and lean `SESSION_STATE.md` checkpoints, preventing full-codebase context crawls.

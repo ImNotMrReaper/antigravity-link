@@ -97,3 +97,46 @@ When writing code or orchestrating tasks, the agent can call these tools directl
   python3 agy_link.py join --room <ROOM_ID> --key <SECRET_KEY> --peer <PEER_NAME>
   ```
 - All packets are cryptographically signed with HMAC-SHA256 to ensure authenticity.
+
+---
+
+## ⚖️ Work-Done Budgeting & Quota Protection Protocol
+
+To protect against Antigravity compute exhaustion when collaborating with remote peer AIs or running tandem turns:
+
+### 1. The Work-Done Metric & 7-Day Lockout Defense
+* **Compute Units:** Antigravity usage is calculated on compute effort (Work Done): **250 units / 5 hours** rolling reset, coupled with a **2,800 units / 7-day hard ceiling**.
+* **The 7-Day Lockout Trap:** If the 2,800 weekly cap is breached, your station is locked out for 3 to 7 days regardless of the 5-hour rolling timer.
+* **Model Compute Multipliers:**
+  * **Gemini Flash:** ~10x fewer units than Sonnet; up to 800x cheaper than Opus. Used for fast-mode planning, micro-tasks, and initial scaffolding.
+  * **Sonnet (Fast Mode):** Balanced baseline for core systems engineering (40–80 hours active compute/week).
+  * **Claude Opus:** 8x multiplier over Sonnet. Can exhaust your entire 7-day quota in ~3 hours. Strictly restricted to high-complexity architectural design.
+
+### 2. Lean Token-Diet & Micro-Payload Architecture
+To prevent swarm token drain and protect our station when interacting with remote peer agents:
+1. **Delta-Only Pre-Invocation:** Output 0 tokens unless an active file lock or urgent conflict exists.
+2. **Micro-Payload Formatting:** All peer machine handoffs and remote tasks must use compact structured JSON (`{"action":"...", "cmd":"..."}`) or concise summaries under 120 characters. Reject conversational pleasantries or natural language chatter between agents.
+3. **Single-Round Task Handoff:** Follow strict single-turn cycles: `Request -> Execute -> Machine Result -> Terminate Turn`. Never allow autonomous conversational ping-pong loops.
+4. **Failure-Only Diagnostics:**
+   * On success (`exit 0`): Return a 1-line structured confirmation.
+   * On failure (`exit != 0`): Truncate diagnostic output strictly to the last 10 lines of standard error.
+5. **Tail-Inbox Fetching:** Read unconsumed message deltas (`peek=1`) rather than swallowing entire historical thread logs.
+
+### 3. Modular Architecture Blueprint (Complex Multi-Agent Projects)
+When building complex systems (e.g. trading bots, driver suites, daemon frameworks), decompose the project into decoupled modules before generating code:
+```
+project/
+├── data_feed/          # Ingestion / async stream handlers
+├── core_engine/        # Mathematical / model / logic processing
+├── strategy/           # Decision / state evaluation rules
+├── execution/          # Simulator / paper-trading router & live dispatch
+├── risk/               # Drawdown guards, circuit breakers, hard limits
+├── tests/              # Isolated unit test harnesses with mock fixtures
+└── SESSION_STATE.md    # Lean state handoff preventing full-transcript crawls
+```
+
+### 4. State Handoff Engineering (`SESSION_STATE.md`)
+* Maintain a compact markdown handoff file (`SESSION_STATE.md`) tracking active milestones, completed components, and next actionable steps.
+* Always use strict file pinning (`@file` or exact paths) rather than scanning or crawling entire repositories, preserving our compute quota.
+* Build all modules with mock fixtures (`pytest`, `unittest.mock`) to prevent recursive agent debugging loops.
+

@@ -62,3 +62,13 @@
 ## 9. Cryptographic Room Pairing & HMAC Authentication
 - All wire packets are signed with HMAC-SHA256 using the session secret key.
 - Packets failing signature verification are automatically rejected to prevent spoofing or unauthorized remote control.
+
+## 10. Antigravity Work-Done Budgeting & Token-Diet Guardrail
+- **Quota Protection:** Antigravity enforces a strict 250 unit / 5-hour rolling reset and a 2,800 unit / 7-day hard lockout ceiling. Breaching 2,800 units results in a 3–7 day lockout.
+- **Defensive Independence:** Even if remote peer AIs or external collaborators are unconstrained or running verbose prompts, the host AI MUST strictly enforce local token and compute hygiene to prevent quota draining:
+  - **Zero-Banter Rule:** Never engage in conversational chit-chat, conversational confirmations, or pleasantries with peer AIs.
+  - **Micro-Payload Architecture:** Keep all machine handoffs, status synchronizations, and delegated tasks strictly under 120 characters or formatted as compact structured JSON (`{"action": "...", "cmd": "..."}`).
+  - **Single-Turn Handoff Cycles:** Enforce `Request -> Execute -> Result -> Stop`. Never trigger recursive multi-turn chat loops or continuous polling.
+  - **Failure-Only Diagnostics:** Return a 1-line confirmation on success (`exit 0`). Return strictly the last 10 lines of stderr on failure (`exit != 0`).
+  - **Pre-Invocation Delta Check:** Output 0 tokens unless an active file lock conflict or urgent task notification exists.
+  - **Modular Architecture Isolation:** Always decouple complex builds into independent modules (`data_feed/`, `core_engine/`, `strategy/`, `execution/`, `risk/`, `tests/`) with mock unit test harnesses and lean `SESSION_STATE.md` checkpoints, preventing full-codebase context crawls.
