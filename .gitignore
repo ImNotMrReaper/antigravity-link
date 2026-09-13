@@ -1,19 +1,61 @@
-# Local runtime state & inbox
+# ==============================================================================
+# Sensitive Personal Data, Cryptographic Keys & Local Tandem State
+# ==============================================================================
+
+# Cryptographic Keys, HMAC Session Secrets & Auth Tokens
+session.key
+*.key
+*.pem
+*.crt
+*.secret
+*.secrets
+secrets/
+*credential*
+token.json
+*.token
+
+# Local Runtime Tandem State, Inboxes & Machine Paths
 .agy_link/
 config.json
 INBOX.md
 LATEST.json
 repo_path.txt
+peer_state.json
+session_state.json
+auth_state.json
+local_state.json
 *.txt.bak
 
-# Python artifacts
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
+# Environment Variables
+.env
+.env.*
+*.env
 
-# Environment
+# Local Logs & Databases
+*.log
+logs/
+*.db
+*.sqlite*
+scratch/
+tmp/
+temp/
+
+# Python Artifacts & Virtual Environments
+__pycache__/
+*.py[cod]
+*$py.class
+*.swp
+*.swo
+*.bak*
+*~
+.pytest_cache/
 .venv/
 venv/
+build/
+dist/
+
+# IDE, Editor & OS Artifacts
 .idea/
 .vscode/
+.DS_Store
+Thumbs.db
