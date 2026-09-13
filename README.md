@@ -55,19 +55,22 @@ When two developers pair-program on separate machines across the internet, their
 
 ---
 
-## 🚀 Plugin Installation
+## 🚀 Quick Start (1-Line Installation)
 
-Install Antigravity Link natively using the `agy plugin` CLI:
+Install the Antigravity Link plugin, agent skills, and terminal CLI tool with a single command:
 
 ```bash
-# Global installation for all projects
+curl -fsSL https://raw.githubusercontent.com/ImNotMrReaper/antigravity-link/main/install.sh | bash
+```
+
+### Option 2: Manual Installation via AGY Plugin CLI
+```bash
 git clone https://github.com/ImNotMrReaper/antigravity-link.git ~/.gemini/config/plugins/antigravity-link
 agy plugin install ~/.gemini/config/plugins/antigravity-link
 ```
 
-Or enable project-level tandem sync in your repository:
+### Option 3: Project-Level Tandem Sync
 ```bash
-# Clone directly into project customization directory
 git clone https://github.com/ImNotMrReaper/antigravity-link.git .agents/plugins/antigravity-link
 ```
 
